@@ -13,55 +13,17 @@ from PySide6 import QtCore, QtGui, QtWidgets as W
 from PySide6.QtCore import Qt
 
 from . import assistant, client, paths, system
+from .theme import QSS, icon, logo_pixmap, make_icon, save_ico, sym_icon, symbol_pixmap
 
-QSS = """
-* { font-family: 'Segoe UI'; font-size: 11.5pt; color: #e6e8ee; }
-QMainWindow, QDialog, QWidget#page { background: #0f1115; }
-QFrame#bubble_user { background: #1b2740; border: 1px solid #2a3b60; border-radius: 12px; }
-QFrame#bubble_model { background: #171a21; border: 1px solid #262b36; border-radius: 12px; }
-QFrame#composer { background: #12151b; border: 1px solid #2c3340; border-radius: 12px; }
-QFrame#panel { background: #14171d; border: 1px solid #262b36; border-radius: 10px; }
-QLabel { background: transparent; }
-QLabel#h1 { font-size: 17pt; font-weight: 600; } QLabel#h2 { font-size: 12.5pt; font-weight: 600; color: #aeb6c7; }
-QLabel#muted { color: #8b93a5; font-size: 10.5pt; } QLabel#big { font-size: 12.5pt; font-weight: 600; }
-QPushButton { background: #1c212b; border: 1px solid #2c3340; border-radius: 8px; padding: 7px 16px; font-weight: 500; }
-QPushButton:hover { border-color: #4f8cff; background: #212836; } QPushButton:disabled { color: #5b6578; }
-QPushButton#primary { background: #4f8cff; border-color: #4f8cff; color: white; } QPushButton#primary:hover { background: #3f7bef; }
-QPushButton#tool { padding: 5px 10px; font-size: 10.5pt; }
-QPushButton#bigplay, QPushButton#bigpause { padding: 9px 20px; font-size: 12pt; font-weight: 600; }
-QPushButton#bigplay:checked { background: #f0506e; border-color: #f0506e; color: white; }
-QPushButton#bigpause:checked { background: #f5a524; border-color: #f5a524; color: #1a1300; }
-QListWidget, QTableWidget { background: transparent; border: none; outline: none; gridline-color: #262b36; alternate-background-color: #151920; }
-QListWidget#models::item { font-size: 10.5pt; padding: 8px 8px; border-radius: 8px; margin: 1px 4px; } QListWidget#models::item:selected { background: #212a3d; color: white; }
-QListWidget#models::item:hover { background: #1a2030; }
-QListWidget#files::item { border-radius: 8px; padding: 4px; } QListWidget#files::item:selected { background: #212a3d; } QListWidget#files::item:hover { background: #1a2030; }
-QTableWidget { selection-background-color: #212a3d; selection-color: white; }
-QHeaderView::section { background: transparent; color: #8b93a5; border: none; border-bottom: 1px solid #262b36; padding: 6px 8px; font-weight: 500; }
-QTabWidget::pane { border: none; } QTabBar::tab { background: transparent; color: #8b93a5; padding: 8px 18px; border-bottom: 2px solid transparent; font-size: 12pt; }
-QTabBar::tab:selected { color: white; border-bottom: 2px solid #4f8cff; }
-QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox { background: #12151b; border: 1px solid #2c3340; border-radius: 8px; padding: 7px 10px; selection-background-color: #4f8cff; }
-QComboBox QAbstractItemView { background: #171a21; selection-background-color: #212a3d; border: 1px solid #2c3340; }
-QPlainTextEdit { background: #0b0d11; color: #c5cad6; border: 1px solid #262b36; border-radius: 8px; font-family: Consolas; font-size: 10pt; padding: 8px; }
-QSlider::groove:horizontal { height: 4px; background: #2c3340; border-radius: 2px; } QSlider::sub-page:horizontal { background: #4f8cff; border-radius: 2px; }
-QSlider::handle:horizontal { background: #e6e8ee; width: 14px; margin: -5px 0; border-radius: 7px; }
-QCheckBox { spacing: 10px; padding: 3px 0; } QCheckBox::indicator { width: 18px; height: 18px; border: 1px solid #3a4252; border-radius: 5px; background: #12151b; }
-QCheckBox::indicator:checked { background: #4f8cff; border-color: #4f8cff; }
-QStatusBar { background: #0f1115; border-top: 1px solid #262b36; } QStatusBar QLabel { padding: 0 12px; font-size: 10pt; color: #8b93a5; }
-QScrollBar:vertical { background: transparent; width: 10px; } QScrollBar::handle:vertical { background: #2c3340; border-radius: 5px; min-height: 30px; }
-QScrollBar:horizontal { background: transparent; height: 10px; } QScrollBar::handle:horizontal { background: #2c3340; border-radius: 5px; min-width: 30px; }
-QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
-QSplitter::handle { background: transparent; }
-QMenu { background: #171a21; border: 1px solid #2c3340; padding: 4px; } QMenu::item { padding: 6px 22px; border-radius: 6px; } QMenu::item:selected { background: #212a3d; }
-QToolTip { background: #232a37; color: #e6e8ee; border: 1px solid #343b4a; padding: 5px; }
-"""
+# look and feel (palette, icons, logo): see theme.py
 
 SYM = {"🖼️": "✎", "🎨": "✦", "🧊": "⬢", "🗿": "◈", "🛠️": "⚒", "🧱": "▦", "🎵": "♪", "🔊": "♬", "🎮": "▷", "📸": "◎", "🎬": "▶", "🐍": "λ", "⚙️": "⚙"}
 STATE_HE = {"running": "רץ", "paused": "מוקפא", "queued": "ממתין", "held": "עצור", "done": "הצליח", "failed": "נכשל", "cancelled": "בוטל", "lost": "לא ידוע"}
-STATE_COLOR = {"running": "#34c38f", "paused": "#f5a524", "queued": "#8b93a5", "held": "#f5a524", "done": "#34c38f", "failed": "#f0506e", "cancelled": "#8b93a5", "lost": "#f5a524"}
+STATE_COLOR = {"running": "#5fad65", "paused": "#e0a030", "queued": "#868a91", "held": "#e0a030", "done": "#5fad65", "failed": "#db5c5c", "cancelled": "#868a91", "lost": "#e0a030"}
 HIDDEN_FILES = {"job.log", "result.json"}
 IMG = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 KIND = {".glb": ("⬢", "#2aa198"), ".gltf": ("⬢", "#2aa198"), ".obj": ("⬢", "#2aa198"), ".ogg": ("♪", "#43a047"), ".wav": ("♪", "#43a047"), ".flac": ("♪", "#43a047"),
-        ".mp3": ("♪", "#43a047"), ".mp4": ("▶", "#c0392b"), ".json": ("≡", "#8b93a5"), ".txt": ("≡", "#8b93a5"), ".log": ("≡", "#8b93a5"), ".blend": ("⚒", "#e87d0d")}
+        ".mp3": ("♪", "#43a047"), ".mp4": ("▶", "#c0392b"), ".json": ("≡", "#868a91"), ".txt": ("≡", "#868a91"), ".log": ("≡", "#868a91"), ".blend": ("⚒", "#e87d0d")}
 
 
 def ltr(t):
@@ -109,37 +71,6 @@ def he_reason(r):
     return r
 
 
-def symbol_pixmap(symbol, color, size=96):
-    pm = QtGui.QPixmap(size, size)
-    pm.fill(Qt.transparent)
-    p = QtGui.QPainter(pm)
-    p.setRenderHint(QtGui.QPainter.Antialiasing)
-    c = QtGui.QColor(color)
-    p.setBrush(QtGui.QColor(c.red(), c.green(), c.blue(), 40))
-    p.setPen(QtGui.QPen(QtGui.QColor(c.red(), c.green(), c.blue(), 110), 1))
-    p.drawRoundedRect(2, 2, size - 4, size - 4, size // 7, size // 7)
-    p.setPen(c)
-    p.setFont(QtGui.QFont("Segoe UI Symbol", size // 3))
-    p.drawText(pm.rect(), Qt.AlignCenter, symbol)
-    p.end()
-    return pm
-
-
-def make_icon(color="#4f8cff"):
-    pm = QtGui.QPixmap(64, 64)
-    pm.fill(Qt.transparent)
-    p = QtGui.QPainter(pm)
-    p.setRenderHint(QtGui.QPainter.Antialiasing)
-    p.setBrush(QtGui.QColor(color))
-    p.setPen(Qt.NoPen)
-    p.drawRoundedRect(2, 2, 60, 60, 16, 16)
-    p.setPen(QtGui.QColor("white"))
-    p.setFont(QtGui.QFont("Segoe UI", 26, QtGui.QFont.Bold))
-    p.drawText(pm.rect(), Qt.AlignCenter, "AI")
-    p.end()
-    return QtGui.QIcon(pm)
-
-
 class Poller(QtCore.QThread):
     got = QtCore.Signal(dict)
     down = QtCore.Signal(str)
@@ -166,7 +97,7 @@ class Poller(QtCore.QThread):
 class Bar(W.QFrame):
     def __init__(self):
         super().__init__()
-        self.f, self.color = 0.0, "#34c38f"
+        self.f, self.color = 0.0, "#5fad65"
         self.marker = None
 
     def paintEvent(self, e):
@@ -175,7 +106,7 @@ class Bar(W.QFrame):
         w, h = self.width(), self.height()
         rtl = self.layoutDirection() == Qt.RightToLeft
         p.setPen(Qt.NoPen)
-        p.setBrush(QtGui.QColor("#262b36"))
+        p.setBrush(QtGui.QColor("#393b40"))
         p.drawRoundedRect(0, 0, w, h, 4, 4)
         if self.f > 0:
             p.setBrush(QtGui.QColor(self.color))
@@ -184,7 +115,7 @@ class Bar(W.QFrame):
         if self.marker is not None:
             x = w * self.marker
             x = w - x if rtl else x
-            p.setPen(QtGui.QPen(QtGui.QColor("#4f8cff"), 2))
+            p.setPen(QtGui.QPen(QtGui.QColor("#3574f0"), 2))
             p.drawLine(QtCore.QPointF(x, -1), QtCore.QPointF(x, h + 1))
 
 
@@ -214,7 +145,7 @@ class Gauge(W.QWidget):
 
     def set(self, used, total, num_text, marker=None):
         f = max(0.0, min(1.0, used / total if total else 0))
-        color, word = ("#34c38f", "") if f < 0.6 else ("#f5a524", "עמוס") if f < 0.85 else ("#f0506e", "כמעט מלא")
+        color, word = ("#5fad65", "") if f < 0.6 else ("#e0a030", "עמוס") if f < 0.85 else ("#db5c5c", "כמעט מלא")
         self.word.setText(word)
         self.word.setStyleSheet("font-weight:600; color:%s;" % color)
         self.num.setText(num_text)
@@ -573,7 +504,7 @@ class TurntableDialog(W.QDialog):
         self.view = W.QLabel()
         self.view.setAlignment(Qt.AlignCenter)
         self.view.setMinimumSize(520, 520)
-        self.view.setStyleSheet("background:#0b0d11; border-radius:10px;")
+        self.view.setStyleSheet("background:#17181a; border-radius:10px;")
         self.view.setCursor(Qt.OpenHandCursor)
         v.addWidget(self.view)
         hint = W.QLabel("גרור עם העכבר כדי לסובב. הדגם מוצג בלי צבע (חומר אפור) כדי לראות את הצורה.")
@@ -666,7 +597,7 @@ class ChatPanel(W.QFrame):
     def __init__(self, main):
         super().__init__()
         self.main = main
-        self.setObjectName("panel")
+        self.setObjectName("editor")
         self.attached = None
         self.sig = None
         v = W.QVBoxLayout(self)
@@ -707,12 +638,12 @@ class ChatPanel(W.QFrame):
         self.drop_zone = W.QLabel("גרור לכאן תמונה, או לחץ ״בחר תמונה״ ואז ״צור דגם 3D״")
         self.drop_zone.setAlignment(Qt.AlignCenter)
         self.drop_zone.setMinimumHeight(70)
-        self.drop_zone.setStyleSheet("border: 2px dashed #3a4252; border-radius: 12px; color: #8b93a5; padding: 14px;")
+        self.drop_zone.setStyleSheet("border: 2px dashed #4e5157; border-radius: 12px; color: #868a91; padding: 14px;")
         cl.addWidget(self.drop_zone)
         self.edit = W.QPlainTextEdit()
         self.edit.setFixedHeight(62)
         self.edit.setLayoutDirection(Qt.LeftToRight)
-        self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #e6e8ee; font-family: 'Segoe UI'; font-size: 11.5pt; }")
+        self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #dfe1e5; font-family: 'Segoe UI'; font-size: 10.5pt; }")
         self.edit.setPlaceholderText("כתוב כאן מה לעשות…  (Enter לשליחה)")
         self.edit.installEventFilter(self)
         cl.addWidget(self.edit)
@@ -947,7 +878,7 @@ class ChatPanel(W.QFrame):
                 if f.lower().endswith(".glb"):
                     tiles.append(self.main.glb_tile(f))
                     continue
-                sym, col = KIND.get(Path(f).suffix.lower(), ("▫", "#8b93a5"))
+                sym, col = KIND.get(Path(f).suffix.lower(), ("▫", "#868a91"))
                 t = Thumb(symbol_pixmap(sym, col, 84), f)
                 t.setToolTip(f)
                 tiles.append(t)
@@ -988,7 +919,7 @@ class AssistantPanel(W.QFrame):
     def __init__(self, main):
         super().__init__()
         self.main = main
-        self.setObjectName("panel")
+        self.setObjectName("editor")
         self.hist = assistant.load_history()
         self.worker = None
         self.pending = []
@@ -1045,7 +976,7 @@ class AssistantPanel(W.QFrame):
         self.edit = W.QPlainTextEdit()
         self.edit.setFixedHeight(62)
         self.edit.setPlaceholderText("כתוב לעוזר…  (Enter לשליחה)")
-        self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #e6e8ee; font-family: 'Segoe UI'; font-size: 11.5pt; }")
+        self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #dfe1e5; font-family: 'Segoe UI'; font-size: 10.5pt; }")
         self.edit.installEventFilter(self)
         cl.addWidget(self.edit)
         row = W.QHBoxLayout()
@@ -1246,44 +1177,63 @@ class Main(W.QMainWindow):
         root.setObjectName("page")
         self.setCentralWidget(root)
         v = W.QVBoxLayout(root)
-        v.setContentsMargins(18, 14, 18, 8)
-        v.setSpacing(12)
-        head = W.QHBoxLayout()
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
+        bar = W.QFrame()
+        bar.setObjectName("topbar")
+        head = W.QHBoxLayout(bar)
+        head.setContentsMargins(12, 7, 12, 7)
+        head.setSpacing(6)
+        logo = W.QLabel()
+        logo.setPixmap(logo_pixmap(30))
+        brand = W.QLabel("AI Broker")
+        brand.setObjectName("brand")
+        sep = W.QFrame()
+        sep.setFixedSize(1, 20)
+        sep.setStyleSheet("background:#393b40;")
         self.dot = W.QLabel("")
-        self.dot.setFixedSize(14, 14)
-        col = W.QVBoxLayout()
-        col.setSpacing(0)
+        self.dot.setFixedSize(9, 9)
         self.h_title = W.QLabel("מתחבר…")
-        self.h_title.setObjectName("h1")
+        self.h_title.setObjectName("big")
         self.h_sub = W.QLabel("")
         self.h_sub.setObjectName("muted")
-        col.addWidget(self.h_title)
-        col.addWidget(self.h_sub)
+        for w in (logo, brand):
+            head.addWidget(w)
+        head.addSpacing(8)
+        head.addWidget(sep)
+        head.addSpacing(8)
         head.addWidget(self.dot, 0, Qt.AlignVCenter)
-        head.addLayout(col)
+        head.addWidget(self.h_title)
+        head.addWidget(self.h_sub)
         head.addStretch(1)
-        self.play = W.QPushButton("אני משחק / מקליט")
-        self.play.setObjectName("bigplay")
-        self.play.setCheckable(True)
-        self.play.setToolTip("כשזה דלוק, עבודות GPU מחכות ועבודות GPU שרצות מוקפאות, כדי שהמשחק או ההקלטה לא יגמגמו")
+
+        def tb(name, text, tip, obj="tb", checkable=False):
+            btn = W.QPushButton(text)
+            btn.setObjectName(obj)
+            btn.setIcon(icon(name, "#b4b8bf", 16))
+            btn.setIconSize(QtCore.QSize(16, 16))
+            btn.setToolTip(tip)
+            btn.setCheckable(checkable)
+            btn.setCursor(Qt.PointingHandCursor)
+            return btn
+        self.play = tb("gamepad", "משחק / הקלטה", "כשזה דלוק, עבודות GPU מחכות ועבודות GPU שרצות מוקפאות, כדי שהמשחק או ההקלטה לא יגמגמו", "tbplay", True)
         self.play.clicked.connect(lambda on: self.api({"op": "playing", "on": on}))
-        self.pause = W.QPushButton("עצור הכול")
-        self.pause.setObjectName("bigpause")
-        self.pause.setCheckable(True)
-        self.pause.setToolTip("שום עבודה חדשה לא מתחילה עד שתמשיך")
+        self.pause = tb("pause", "עצור הכול", "שום עבודה חדשה לא מתחילה עד שתמשיך", "tbpause", True)
         self.pause.clicked.connect(lambda on: self.api({"op": "pause"} if on else {"op": "resume"}))
-        adv = W.QPushButton("מתקדם")
+        adv = tb("gear", "מתקדם", "מגבלות, הפעלה עם Windows, חיבור ל-Claude Code, יומן")
         adv.clicked.connect(self.open_advanced)
-        ask = W.QPushButton("עוזר Claude")
-        ask.setObjectName("primary")
-        ask.setToolTip("שיחה עם Claude בתוך התוכנה: שאלות על המחשב והמודלים, הרצת עבודות, והמלצה והורדה של מודלים (באישור שלך)")
+        ask = tb("sparkles", "עוזר", "שיחה עם Claude בתוך התוכנה: שאלות על המחשב והמודלים, הרצת עבודות, והמלצה והורדה של מודלים (באישור שלך)", "tb")
         ask.clicked.connect(self.open_claude)
-        for b in (ask, self.play, self.pause, adv):
-            head.addWidget(b)
-        v.addLayout(head)
+        for b_ in (ask, self.play, self.pause, adv):
+            head.addWidget(b_)
+        v.addWidget(bar)
         split = W.QSplitter(Qt.Horizontal)
         split.setChildrenCollapsible(False)
-        v.addWidget(split, 1)
+        body = W.QWidget()
+        bl2 = W.QVBoxLayout(body)
+        bl2.setContentsMargins(8, 8, 8, 6)
+        bl2.addWidget(split)
+        v.addWidget(body, 1)
         mp = self._panel()
         ml = W.QVBoxLayout(mp)
         ml.setContentsMargins(8, 12, 8, 8)
@@ -1292,7 +1242,7 @@ class Main(W.QMainWindow):
         ml.addWidget(t)
         self.model_list = W.QListWidget()
         self.model_list.setObjectName("models")
-        self.model_list.setIconSize(QtCore.QSize(26, 26))
+        self.model_list.setIconSize(QtCore.QSize(20, 20))
         self.model_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.model_list.currentRowChanged.connect(self.on_model)
         self.model_list.setContextMenuPolicy(Qt.CustomContextMenu)
@@ -1370,7 +1320,6 @@ class Main(W.QMainWindow):
         hl.addWidget(self.hist, 1)
         self.tabs.addTab(hw, "היסטוריה")
         tl.addWidget(self.tabs)
-        cs.addWidget(top)
         outp = self._panel()
         ol = W.QVBoxLayout(outp)
         ol.setContentsMargins(12, 10, 12, 10)
@@ -1412,7 +1361,8 @@ class Main(W.QMainWindow):
         self.lower.addWidget(self.chat)
         self.lower.addWidget(self.assistant_panel)
         cs.addWidget(self.lower)
-        cs.setSizes([150, 600])
+        cs.addWidget(top)
+        cs.setSizes([600, 170])
         split.addWidget(cs)
         rp = self._panel()
         rl = W.QVBoxLayout(rp)
@@ -1628,17 +1578,17 @@ class Main(W.QMainWindow):
         self.model_list.clear()
         it = W.QListWidgetItem("  עוזר Claude")
         it.setData(Qt.UserRole, "__assistant__")
-        it.setIcon(QtGui.QIcon(symbol_pixmap("✦", "#4f8cff", 52)))
+        it.setIcon(sym_icon("✧", "#3574f0", 20))
         self.model_list.addItem(it)
         it = W.QListWidgetItem("  הכול")
         it.setData(Qt.UserRole, None)
-        it.setIcon(QtGui.QIcon(symbol_pixmap("▤", "#aeb6c7", 52)))
+        it.setIcon(sym_icon("▤", "#b4b8bf", 20))
         self.model_list.addItem(it)
         for g in self.models:
             n = self.count_outputs(g["dir"])
             it = W.QListWidgetItem("  %s%s" % (g["title"], ("   (%d)" % n) if n else ""))
             it.setData(Qt.UserRole, g["dir"])
-            it.setIcon(QtGui.QIcon(symbol_pixmap(g["sym"], g["color"], 52)))
+            it.setIcon(sym_icon(g["sym"], g["color"], 20))
             self.model_list.addItem(it)
         sel = 1
         want = "__assistant__" if self.assistant_mode else cur
@@ -1659,7 +1609,7 @@ class Main(W.QMainWindow):
         self.lower.setCurrentIndex(2 if self.assistant_mode else (1 if self.sel_model else 0))
         sp = self.lower.parent()
         if isinstance(sp, W.QSplitter):
-            sp.setSizes([120, 640] if self.assistant_mode else ([150, 600] if self.sel_model else [300, 400]))
+            sp.setSizes([640, 120] if self.assistant_mode else ([600, 150] if self.sel_model else [400, 300]))
         self.chat.set_attached(None)
         self.refresh_files()
         self.refresh_chat(force=True)
@@ -1729,7 +1679,7 @@ class Main(W.QMainWindow):
             if not img.isNull():
                 icon = QtGui.QIcon(QtGui.QPixmap.fromImage(img.scaled(110, 110, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
         if icon is None:
-            sym, col = KIND.get(ext, ("▫", "#8b93a5"))
+            sym, col = KIND.get(ext, ("▫", "#868a91"))
             icon = QtGui.QIcon(symbol_pixmap(sym, col, 110))
         if len(self.thumb_cache) > 400:
             self.thumb_cache.clear()
@@ -1813,10 +1763,10 @@ class Main(W.QMainWindow):
 
     # ------------------------------------------------------------ state
     def on_down(self, msg):
-        self.set_head("#8b93a5", "השירות לא רץ", "הפעל מחדש עם AI_Broker.bat")
+        self.set_head("#868a91", "השירות לא רץ", "הפעל מחדש עם AI_Broker.bat")
 
     def set_head(self, color, title, sub):
-        self.dot.setStyleSheet("background:%s; border-radius:7px;" % color)
+        self.dot.setStyleSheet("background:%s; border-radius:4px;" % color)
         self.h_title.setText(title)
         self.h_sub.setText(sub)
 
@@ -1838,20 +1788,21 @@ class Main(W.QMainWindow):
         st = s["status"]
         f = used / sy["ram_total"]
         if st == "BRAKE":
-            self.set_head("#f0506e", "המחשב בלחץ, עצרתי הכול", "מעט RAM פנוי. עבודות חדשות לא יתחילו עד שיירגע. " + counts)
+            self.set_head("#db5c5c", "המחשב בלחץ, עצרתי הכול", "מעט RAM פנוי. עבודות חדשות לא יתחילו עד שיירגע. " + counts)
         elif st == "PLAYING":
-            self.set_head("#f0506e", "אתה משחק / מקליט", "עבודות GPU מחכות. " + counts)
+            self.set_head("#db5c5c", "אתה משחק / מקליט", "עבודות GPU מחכות. " + counts)
         elif st == "PAUSED":
-            self.set_head("#f5a524", "הכול מושהה", "שום עבודה חדשה לא מתחילה. " + counts)
+            self.set_head("#e0a030", "הכול מושהה", "שום עבודה חדשה לא מתחילה. " + counts)
         elif f < 0.7:
-            self.set_head("#34c38f", "מנהל העבודות", counts)
+            self.set_head("#5fad65", "פעיל", counts)
         elif f < 0.88:
-            self.set_head("#f5a524", "מנהל העבודות", counts + "   •   RAM עמוס")
+            self.set_head("#e0a030", "פעיל", counts + "   •   RAM עמוס")
         else:
-            self.set_head("#f0506e", "מנהל העבודות", counts + "   •   RAM כמעט מלא")
+            self.set_head("#db5c5c", "RAM כמעט מלא", counts)
         self.play.setChecked(s["playing"])
         self.pause.setChecked(s["paused"])
         self.pause.setText("המשך" if s["paused"] else "עצור הכול")
+        self.pause.setIcon(icon("play" if s["paused"] else "pause", "#b4b8bf", 16))
         self.building = True
         for k, (sl, val) in self.sl.items():
             if not sl.isSliderDown():
@@ -1862,7 +1813,7 @@ class Main(W.QMainWindow):
         self.refresh_chat()
         self.sb.setText("RAM פנוי: %.0f GB      Commit פנוי: %.0f GB%s" % (sy["ram_avail"], sy["commit_avail"], ("      נעילת GPU: " + {"ours": "אצל ה-broker", "foreign": "אצל תוכנה אחרת"}.get(s["lock"], s["lock"])) if s["lock"] != "none" else ""))
         if self.tray and st != self.last_status:
-            self.tray.setIcon(make_icon({"ACTIVE": "#34c38f", "PAUSED": "#f5a524", "PLAYING": "#f0506e", "BRAKE": "#f0506e"}[st]))
+            self.tray.setIcon(make_icon({"ACTIVE": "#5fad65", "PAUSED": "#e0a030", "PLAYING": "#db5c5c", "BRAKE": "#db5c5c"}[st]))
             self.last_status = st
         for n, ts, text in s.get("events", []):
             self.log_text += "%s  %s\n" % (time.strftime("%H:%M:%S", time.localtime(ts)), text)
@@ -1894,17 +1845,17 @@ class Main(W.QMainWindow):
                 det = eta_text(j) or (ltr("GPU %.1f GB" % j["cur_vram"]) if j.get("cur_vram") else "")
             else:
                 tm, ram, det = fmt_dur(time.time() - j["submitted"]), ltr("~%.0f GB" % j["est_ram"]), ("עצרת אותה בעצמך" if j.get("held") else he_reason(j.get("reason", "")))
-            vals = [str(j["id"]), "%s  %s" % (sym, ttl), j["name"], j["requester"], STATE_HE.get(st, st), tm, ram, det]
+            vals = [str(j["id"]), ttl, j["name"], j["requester"], STATE_HE.get(st, st), tm, ram, det]
             for c, v in enumerate(vals):
                 it = q.item(r, c) or W.QTableWidgetItem()
                 it.setText(v)
                 it.setToolTip(v if c in (2, 7) else (("הערכה: " + j["est_source"]) if c == 6 else ""))
                 if c == 1:
-                    it.setForeground(QtGui.QColor(color))
+                    it.setIcon(sym_icon(sym, color, 16))
                 elif c == 4:
-                    it.setForeground(QtGui.QColor(STATE_COLOR.get(st, "#aeb6c7")))
+                    it.setForeground(QtGui.QColor(STATE_COLOR.get(st, "#b4b8bf")))
                 elif c == 7:
-                    it.setForeground(QtGui.QColor("#f5a524" if j["state"] == "queued" and j.get("reason") else "#aeb6c7"))
+                    it.setForeground(QtGui.QColor("#e0a030" if j["state"] == "queued" and j.get("reason") else "#b4b8bf"))
                 flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
                 if j["state"] == "queued":
                     flags |= Qt.ItemIsDragEnabled
@@ -1927,14 +1878,14 @@ class Main(W.QMainWindow):
         for i, j in enumerate(jobs):
             sym, color, ttl = self.type_info(j["type"])
             dur = (j.get("finished") or 0) - (j.get("started") or j.get("finished") or 0)
-            vals = [str(j["id"]), "%s  %s" % (sym, ttl), j["name"], j["requester"], STATE_HE.get(j["state"], j["state"]), fmt_dur(dur),
+            vals = [str(j["id"]), ttl, j["name"], j["requester"], STATE_HE.get(j["state"], j["state"]), fmt_dur(dur),
                     ltr("RAM %.1f GB   GPU %.1f GB" % (j.get("peak_ws") or 0, j.get("peak_vram") or 0))]
             for c, v in enumerate(vals):
                 it = W.QTableWidgetItem(v)
                 if c == 1:
-                    it.setForeground(QtGui.QColor(color))
+                    it.setIcon(sym_icon(sym, color, 16))
                 if c == 4:
-                    it.setForeground(QtGui.QColor(STATE_COLOR.get(j["state"], "#aeb6c7")))
+                    it.setForeground(QtGui.QColor(STATE_COLOR.get(j["state"], "#b4b8bf")))
                 h.setItem(i, c, it)
 
     # ------------------------------------------------------------ window
@@ -1964,11 +1915,16 @@ def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
     arg = lambda k, d=None: argv[argv.index(k) + 1] if k in argv else d
     shot, model, tab, size = arg("--screenshot"), arg("--model"), int(arg("--tab", 0)), arg("--size")
+    try:                                         # own taskbar identity: the window icon (our logo) instead of the generic Python icon
+        import ctypes
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("AIBroker.Window")
+    except Exception:
+        pass
     app = W.QApplication(sys.argv[:1])
     app.setStyle("Fusion")
     app.setLayoutDirection(Qt.RightToLeft)
     f = app.font()
-    f.setPointSize(11)
+    f.setPointSize(10)
     app.setFont(f)
     app.setStyleSheet(QSS)
     try:
