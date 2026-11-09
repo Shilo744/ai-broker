@@ -1,0 +1,64 @@
+{
+ "id": "download",
+ "title": "Download a file",
+ "group": "Other",
+ "klass": "cpu",
+ "model": "download",
+ "est": {
+  "ram_gb": 0.3,
+  "vram_gb": 0,
+  "commit_gb": 0.5
+ },
+ "max_parallel": 2,
+ "notes": "Used by the model setup. Resumes, checks size and SHA-256, https from known hosts only (runners/download_file.py).",
+ "params": {
+  "url": {
+   "required": true,
+   "help": "https URL on an allowed host"
+  },
+  "dest": {
+   "required": true,
+   "help": "full path of the file to write"
+  },
+  "sha256": {
+   "help": "expected SHA-256 (hex); the file is only kept when it matches"
+  },
+  "size": {
+   "help": "expected size in bytes"
+  }
+ },
+ "cmd": [
+  "{py_venv}",
+  "{runners}/download_file.py",
+  "--url",
+  "{url}",
+  "--dest",
+  "{dest}",
+  "--sha256",
+  "{sha256}",
+  "--size",
+  "{size}"
+ ],
+ "no_outdir": true,
+ "hidden": true,
+ "icon": "⚙️",
+ "color": "#26a69a",
+ "he_title": "הורדת קובץ",
+ "he_desc": "מוריד קובץ מהאינטרנט, מאמת אותו וממשיך אם נפסק",
+ "he_group": "אחר",
+ "he_about": {
+  "what": "מוריד קובץ (למשל מודל) ממקור מוכר, ממשיך מאותה נקודה אם החיבור נפסק, ושומר אותו רק אם הגודל וה-SHA-256 תואמים.",
+  "inp": "כתובת וקובץ יעד",
+  "out": "הקובץ המאומת",
+  "tip": "ההתקנה הראשונה משתמשת בזה."
+ },
+ "en_title": "Download a file",
+ "en_group": "Other",
+ "en_desc": "Downloads a file from the internet, verifies it and resumes if interrupted",
+ "en_about": {
+  "what": "Downloads a file (for example a model) from a known source, resumes from the same place if the connection drops, and keeps it only if the size and the SHA-256 match.",
+  "inp": "A URL and a destination file",
+  "out": "The verified file",
+  "tip": "The first-run setup uses this."
+ }
+}

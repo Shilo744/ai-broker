@@ -1884,7 +1884,7 @@ class Main(W.QMainWindow):
         sh.addStretch(1)
         self.lim_btn = W.QPushButton(T("מגבלות"))
         self.lim_btn.setObjectName("flat")
-        self.lim_btn.setIcon(icon("gear", "#868a91", 14))
+        self.lim_btn.setIcon(icon("sliders", "#868a91", 14))
         self.lim_btn.setToolTip(T("כמה RAM ו-GPU מותר ל-AI לקחת, כמה עבודות במקביל, ומספרי היום"))
         self.lim_btn.clicked.connect(self.open_limits)
         self.lim_sum = W.QLabel("")
@@ -2308,11 +2308,18 @@ class Main(W.QMainWindow):
             top.setMaximumHeight(self.tabs.tabBar().sizeHint().height() + 8)
 
     def open_limits(self):
+        """The limits popup opens under its button and always stays inside the screen (it used to run off the edge when the window sat at the left of the screen)."""
         p = self.limits_pop
         p.adjustSize()
         b = self.lim_btn
-        pos = b.mapToGlobal(QtCore.QPoint(b.width() - p.width(), b.height() + 4))      # under the button, its start edge aligned to the strip's end
-        p.move(pos)
+        rtl = W.QApplication.layoutDirection() == Qt.RightToLeft
+        left = b.mapToGlobal(QtCore.QPoint(0, 0))
+        x = left.x() if rtl else b.mapToGlobal(QtCore.QPoint(b.width(), 0)).x() - p.width()      # Hebrew: the button is at the left end of the strip, so open towards the right
+        y = b.mapToGlobal(QtCore.QPoint(0, b.height() + 4)).y()
+        scr = (b.screen() or W.QApplication.primaryScreen()).availableGeometry()
+        x = max(scr.left() + 8, min(x, scr.right() - p.width() - 8))
+        y = max(scr.top() + 8, min(y, scr.bottom() - p.height() - 8))
+        p.move(x, y)
         p.show()
 
     def open_settings(self):
