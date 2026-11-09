@@ -40,6 +40,11 @@ def run():
     # 9) layout save/restore
     win.persist = True; win.save_layout(); check("layout saved", bool(win.settings.value("split_main")))
     win.persist = False
+    # 10) a model page without an interface of its own sends the request to the assistant (Claude is stubbed here)
+    sent = {}
+    win.assistant_panel.start_turn = lambda message, extra: sent.update(message=message)
+    win.select_model("sound"); win.chat.edit.setPlainText("make a door sound"); win.chat.send()
+    check("page without interface routes to the assistant", win.assistant_mode and "moss_sound" in sent.get("message", ""))
     print("RESULT %d/%d" % (sum(1 for _, ok in res if ok), len(res)), flush=True)
     app.quit()
 QtCore.QTimer.singleShot(3500, run)

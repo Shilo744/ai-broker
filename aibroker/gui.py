@@ -639,6 +639,16 @@ class TurntableDialog(W.QDialog):
         super().resizeEvent(e)
 
 
+def centered(widget):
+    row = W.QWidget()
+    h = W.QHBoxLayout(row)
+    h.setContentsMargins(0, 0, 0, 0)
+    h.addStretch(1)
+    h.addWidget(widget)
+    h.addStretch(1)
+    return row
+
+
 def aligned(bubble, who):
     """Place a chat bubble on the right (user) or left (model) side of an RTL window. A stretch is used instead of an alignment flag, because alignment breaks wrapped-label heights."""
     row = W.QWidget()
@@ -880,10 +890,26 @@ class ChatPanel(W.QFrame):
                         best = os.path.join(d, n).replace("\\", "/")
         return best
 
+    def send_to_assistant(self):
+        text = self.edit.toPlainText().strip()
+        if not text:
+            self.main.toast("כתוב מה תרצה שיעשו", "warn")
+            return
+        m = self.main
+        g = next((x for x in m.models if x["dir"] == m.sel_model), None)
+        f = self.attached
+        msg = "המשתמש פתח את דף המודל ״%s״ (סוגי עבודה בתור: %s) ומבקש: %s" % (g["title"] if g else "", ", ".join(g["tids"]) if g else "", text)
+        if f:
+            msg += chr(10) + "קובץ מצורף: " + f
+        msg += chr(10) + "הפעל את זה דרך ה-broker (submit_job). אם חסר מידע, שאל אותי בקצרה. התוצאות נשמרות בתיקיית המודל ומופיעות בדף שלו."
+        self.edit.clear()
+        self.set_attached(None)
+        m.ask_assistant(text + (("   (+ %s)" % Path(f).name) if f else ""), msg)
+
     def send(self):
         tid, cfg = self.cfg()
         if not cfg:
-            return
+            return self.send_to_assistant()
         text = self.edit.toPlainText().strip()
         params = {}
         if cfg.get("text"):
@@ -913,7 +939,8 @@ class ChatPanel(W.QFrame):
     def onboarding(self, g, cfg):
         card = W.QFrame()
         card.setObjectName("bubble_model")
-        card.setMaximumWidth(660)
+        card.setMaximumWidth(760)
+        card.setMinimumWidth(520)
         v = W.QVBoxLayout(card)
         v.setContentsMargins(20, 18, 20, 18)
         v.setSpacing(10)
@@ -926,7 +953,7 @@ class ChatPanel(W.QFrame):
         tcol.setSpacing(0)
         t = W.QLabel(g["title"])
         t.setObjectName("h1")
-        sub = W.QLabel("עוד לא נשלחו עבודות" if cfg else "לא מופעל בשיחה: משמש בעיקר את Claude, ואפשר גם לשלוח עבודה ידנית")
+        sub = W.QLabel("עוד לא נשלחו עבודות" if cfg else "אין לו ממשק משלו: כתוב למטה מה תרצה, ו-Claude יפעיל אותו בשבילך")
         sub.setObjectName("muted")
         tcol.addWidget(t)
         tcol.addWidget(sub)
@@ -948,10 +975,6 @@ class ChatPanel(W.QFrame):
                 btn.clicked.connect(lambda _=False, e=ex: (self.edit.setPlainText(e), self.edit.setFocus()))
                 fl.addWidget(btn)
             v.addWidget(holder)
-        if not cfg:
-            btn = W.QPushButton("שלח עבודה ידנית…")
-            btn.clicked.connect(lambda: self.main.open_submit(self.main.model_first_type()))
-            v.addWidget(btn, 0, Qt.AlignRight)
         return card
 
     def build(self, force=False):
@@ -972,21 +995,29 @@ class ChatPanel(W.QFrame):
             it = self.col.takeAt(0)
             if it.widget():
                 it.widget().deleteLater()
-        self.comp.setVisible(bool(cfg))
-        has_text = bool(cfg and cfg.get("text"))
-        has_file = bool(cfg and cfg.get("file"))
+        proxy = cfg is None            # no interface of its own: the request goes to Claude, who runs the model
+        self.comp.setVisible(True)
+        has_text = bool(cfg and cfg.get("text")) or proxy
+        has_file = bool(cfg and cfg.get("file")) or proxy
         self.edit.setVisible(has_text)
         self.drop_zone.setVisible(bool(cfg) and not has_text)
         if cfg and not has_text and not self.attached:
             self.drop_zone.setText("גרור לכאן תמונה, הדבק (Ctrl+V), או לחץ על הסיכה")
         self.attach_btn.setVisible(has_file)
-        self.send_btn.setText("שלח" if has_text and has_file else ("צייר" if has_text else "צור דגם 3D"))
-        self.hint_lbl.setVisible(bool(cfg) and has_text)
+        if proxy:
+            self.send_btn.setText("בקש מ-Claude")
+            self.send_btn.setIcon(icon("sparkles", "#ffffff", 16))
+            self.edit.setPlaceholderText("תאר מה תרצה לעשות עם %s, ו-Claude יפעיל את זה בשבילך…" % (g["title"] if g else "המודל"))
+        else:
+            self.send_btn.setText("שלח" if has_text and has_file else ("צייר" if has_text else "צור דגם 3D"))
+            self.send_btn.setIcon(icon("send", "#ffffff", 16))
+            self.edit.setPlaceholderText("כתוב כאן מה לעשות…")
+        self.hint_lbl.setVisible(has_text)
         self.adv_btn.setVisible(has_text)
         if cfg and cfg.get("text"):
             self.recall = [str((j.get("params") or {}).get(cfg["text"]) or "") for j in jobs if (j.get("params") or {}).get(cfg["text"])]
         if not jobs and g:
-            self.col.addWidget(aligned(self.onboarding(g, cfg), "model"))
+            self.col.addWidget(centered(self.onboarding(g, cfg)))
         for j in jobs:
             self.add_job(j, cfg)
         self.col.addStretch(1)
@@ -1244,6 +1275,14 @@ class AssistantPanel(W.QFrame):
         self.render_history()
 
     # --- turns
+    def ask_from_page(self, display, message):
+        """A request typed on a model page: shown as the user's words, sent with the model context."""
+        if self.worker and self.worker.isRunning():
+            self.main.toast("העוזר עוד עובד על בקשה קודמת, נסה בעוד רגע", "warn")
+            return
+        self.add_bubble("user", display)
+        self.start_turn(message, [])
+
     def on_send_click(self):
         if self.worker and self.worker.isRunning():
             self.worker.cancel()
@@ -1873,6 +1912,11 @@ class Main(W.QMainWindow):
             r = self.api(dlg.request())
             if r and r.get("ok"):
                 self.toast("נוספה עבודה #%d" % r["id"], "ok", "הצג בתור", lambda: self.tabs.setCurrentIndex(0))
+
+    def ask_assistant(self, display, message):
+        self.model_list.setCurrentRow(0)          # the assistant is the first entry of the list
+        self.assistant_panel.ask_from_page(display, message)
+        self.toast("הבקשה הועברה לעוזר", "ok")
 
     def show_output(self, jid, title):
         OutputDialog(self, jid, title).exec()
