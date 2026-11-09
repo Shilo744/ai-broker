@@ -1,6 +1,10 @@
+*.pyc
 .venv/
 __pycache__/
-*.pyc
-shots/
 data/
+job.log
 output/
+output/
+result.json
+shots/
+shots/
