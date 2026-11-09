@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ai-broker": {
+      "command": "C:/Migrated/Projects/Personal/Tools/ai-broker/.venv/Scripts/python.exe",
+      "args": ["C:/Migrated/Projects/Personal/Tools/ai-broker/mcp_launch.py"],
+      "env": { "AIJOB_REQUESTER": "claude" }
+    }
+  }
+}

@@ -252,7 +252,9 @@ class Broker:
             if rc is None:
                 continue
             secs = time.time() - lv.t0
-            peak_c = lv.jobobj.peak_commit_gb()
+            root_ws, root_commit = wu.peak_of_process(lv.proc)
+            lv.peak_ws = max(lv.peak_ws, root_ws)
+            peak_c = max(lv.jobobj.peak_commit_gb(), root_commit)
             state = "cancelled" if lv.cancel else ("done" if rc == 0 else "failed")
             note = "timeout" if lv.timed_out else ""
             j = self.store.get(jid)

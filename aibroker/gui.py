@@ -159,7 +159,7 @@ class QueueTable(W.QTableWidget):
         self.setDefaultDropAction(Qt.CopyAction)            # we move jobs ourselves; Qt must not move/clear the cells
         hh = self.horizontalHeader()
         hh.setStretchLastSection(True)
-        for i, wd in enumerate((40, 250, 100, 170, 80, 80, 100, 70)):
+        for i, wd in enumerate((36, 230, 90, 130, 72, 72, 80, 62)):
             self.setColumnWidth(i, wd)
         self.job_ids = []
         self.queued_ids = []
@@ -715,6 +715,7 @@ class Main(W.QMainWindow):
                     it.setForeground(QtGui.QColor(STATE_COLOR.get(j["state"], "#bbbbbb") if st != "suspended" and st != "held" else "#d7ba7d"))
                 elif c == 8:
                     it.setForeground(QtGui.QColor("#e0a070" if j["state"] == "queued" and j.get("reason") else "#a9b7c6"))
+                    it.setToolTip(v)
                 elif c in (4, 5):
                     it.setToolTip(j["est_source"])
                     it.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)

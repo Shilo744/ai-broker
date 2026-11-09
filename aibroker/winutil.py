@@ -73,6 +73,23 @@ class JobObject:
         k32.CloseHandle(self.h)
 
 
+class _PMC(ctypes.Structure):
+    _fields_ = [("cb", wt.DWORD), ("PageFaultCount", wt.DWORD), ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t), ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+
+
+def peak_of_process(popen):
+    """(peak working set GB, peak commit GB) of the ROOT process, readable from its handle even after it exited."""
+    c = _PMC()
+    c.cb = ctypes.sizeof(c)
+    psapi = ctypes.WinDLL("psapi")
+    psapi.GetProcessMemoryInfo.argtypes = [wt.HANDLE, ctypes.c_void_p, wt.DWORD]
+    if psapi.GetProcessMemoryInfo(int(popen._handle), ctypes.byref(c), c.cb):
+        return c.PeakWorkingSetSize / GB, c.PeakPagefileUsage / GB
+    return 0.0, 0.0
+
+
 # ---------------------------------------------------------------- PDH
 pdh = ctypes.WinDLL("pdh")
 PDH_FMT_LARGE = 0x400

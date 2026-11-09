@@ -221,6 +221,11 @@ def main(argv=None):
     p.add_argument("what", choices=["start", "stop", "status"])
     p.set_defaults(f=cmd_daemon)
 
+    for st in (sys.stdout, sys.stderr):
+        try:
+            st.reconfigure(encoding="utf-8", errors="replace")      # the Hebrew Windows console is cp1255: never crash on a character
+        except Exception:
+            pass
     argv = list(sys.argv[1:] if argv is None else argv)
     tail = []
     if "--" in argv:                      # everything after the first '--' is the command of a custom job

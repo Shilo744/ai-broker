@@ -15,6 +15,12 @@ Walk the queue in order. Start a job when ALL hold: not paused / not "playing" (
 **Affinity:** jobs whose `model` is already loaded (running, or finished < 3 min ago) are lifted ahead of other-model jobs inside the first 8 queue slots, never past a job the owner moved by hand (those are "pinned"). Real model reuse needs batch jobs (one process, many items): the Qwen and TripoSG runners accept a list.
 **Legacy lock:** the broker holds `.../3D maker/characters/.gpu.lock` while any GPU job runs (so char_forge / old scripts wait) and does not start GPU jobs while a foreign holder has it. Godot visual runs take the lock themselves (`self_lock`).
 
+## Claude integration (first-class)
+**MCP server** (`aibroker/mcp_server.py`, stdio, Python `mcp` SDK, MIT): `list_job_types`, `submit_job`, `queue_status`, `job_status`, `job_output`, `job_history`, `wait_for_job` (blocking, max 1500 s, repeatable), `move_job`, `hold_job`, `release_job`, `cancel_job`, `resources`, `get_limits`, and the owner-only `pause_queue`, `resume_queue`, `set_playing_mode`, `set_limits`. Every tool and parameter is documented in its schema and the server sends usage instructions, so Claude needs no prior knowledge (tested with a fresh `claude -p`). **Skill** `skill/ai-broker/SKILL.md`: when to submit, how to give estimates, never start heavy jobs directly, how to be notified (`aijob wait` in the background). `register.bat` / `unregister.bat` / `mcp.json` prepare the registration; nothing edits the owner's Claude settings or any CLAUDE.md by itself.
+
+## Independence
+Own folder and repo; no imports from the games. Project-specific job types and paths live in `adapters/<name>/` (jobtypes + vars), generic ones in `jobtypes/`.
+
 ## Control
 Owner: drag rows / right-click run next, up, down, pause, cancel; Pause all (queue only, or also suspend running); big **I am playing / recording** toggle (no GPU starts, running GPU jobs suspended, resumes on off). `PAUSE_AI.bat` / `RESUME_AI.bat` / `PLAYING_ON.bat` / `PLAYING_OFF.bat`.
 
@@ -25,7 +31,7 @@ An external process cannot message a Claude session. The requester runs `aijob w
 Per job: start/end, seconds, peak working set (polled process tree), peak commit (Windows Job Object `PeakJobMemoryUsed`), peak VRAM (PDH GPU Process Memory counter), free RAM at start. SQLite in `%LOCALAPPDATA%\ai-broker`; job output in `logs\<id>.log`.
 
 ## GUI stack
-Python 3.12 + **PySide6 (Qt 6, LGPL-3, used unmodified as a pip dependency, internal tool, never redistributed)** + psutil (BSD). Why: real native dockable tool windows (QDockWidget), tray, tables with drag-drop, theming with one stylesheet, runs next to the Python job code the lab already uses; no Electron/web page. Dark IDE look (Darcula-like).
+Two views in the same app: the default dark "professional" dock layout (Job Library / Queue / Resources / Log-Output-History, bigger text, an icon per model type, grouped) and a SIMPLE Hebrew card view (big pictures, plain sentences), switchable from the menu. Python 3.12 + **PySide6 (Qt 6, LGPL-3, used unmodified as a pip dependency, internal tool, never redistributed)** + psutil (BSD). Why: real native dockable tool windows (QDockWidget), tray, tables with drag-drop, theming with one stylesheet, runs next to the Python job code the lab already uses; no Electron/web page. Dark IDE look (Darcula-like).
 
 ## It will NOT
 Run on a network (localhost only, no auth: any process of this user can submit); kill processes it did not start; manage the game's or the owner's own programs; schedule time-of-day jobs; start itself at login (owner decides); change CLAUDE.md or any agent rules; resume a job after a *broker* crash (running jobs survive, but their exit code is then unknown -> state `lost`); give true VRAM isolation (it plans from estimates and measurements, the driver can still page).

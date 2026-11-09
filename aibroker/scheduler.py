@@ -65,11 +65,11 @@ def plan(queued, running, limits, flags, sysinfo, lock, warm_models, cfg):
         elif j.get("max_parallel") and sum(1 for r in run if r.get("type") == j["type"]) >= j["max_parallel"]:
             why = "another %s is running (max_parallel %d)" % (j["type"], j["max_parallel"])
         elif ram_used + j["est_ram"] > limits["ram_gb"] and run:
-            why = "RAM budget: %.1f running + %.1f > %.0f GB" % (ram_used, j["est_ram"], limits["ram_gb"])
+            why = "RAM budget: %.0f running + %.0f needed > %.0f limit" % (ram_used, j["est_ram"], limits["ram_gb"])
         elif gpu and vram_used + foreign_vram + j["est_vram"] > limits["vram_gb"] and (run or foreign_vram > 0):
-            why = "VRAM budget: %.1f running + %.1f other + %.1f > %.0f GB" % (vram_used, foreign_vram, j["est_vram"], limits["vram_gb"])
+            why = "VRAM budget: %.0f used by jobs, %.1f by other programs + %.0f needed > %.0f limit" % (vram_used, foreign_vram, j["est_vram"], limits["vram_gb"])
         elif sysinfo["ram_avail"] - ramp_ram - j["est_ram"] < limits["reserve_ram_gb"]:
-            why = "free RAM would drop below %.0f GB (now %.1f free)" % (limits["reserve_ram_gb"], sysinfo["ram_avail"])
+            why = "free RAM would drop below %.0f GB (%.0f free now)" % (limits["reserve_ram_gb"], sysinfo["ram_avail"])
         elif sysinfo["commit_avail"] - ramp_commit - j["est_commit"] < limits["min_commit_free_gb"]:
             why = "free commit would drop below %.0f GB" % limits["min_commit_free_gb"]
         elif (gpu or j.get("hold_lock") or j.get("self_lock")) and cfg.get("respect_gpu_lock", True):
