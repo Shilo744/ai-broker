@@ -35,15 +35,9 @@ The models themselves are **not** included. The job types call tools you install
 
 ## Quick start
 
-```bat
-git clone https://github.com/Shilo744/ai-broker.git
-cd ai-broker
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-bin\AI_Broker.bat
-```
+Needs Windows and [Python 3.10+](https://www.python.org/downloads/windows/) (tick "Add python.exe to PATH"). Download the repository (green **Code** button > **Download ZIP**, or `git clone https://github.com/Shilo744/ai-broker.git`) and **double-click `AI_Broker.bat`**.
 
-The window opens and starts the background service (it keeps running when you close the window). Data and logs live in `%LOCALAPPDATA%\ai-broker`.
+The first time it creates a private `.venv` folder next to it and installs the packages (a few minutes, needs internet); after that it starts at once. The window opens and starts the background service (it keeps running when you close the window). Data and logs live in `%LOCALAPPDATA%\ai-broker`.
 
 Connect Claude Code (optional): **Settings (gear icon) > Claude > Connect Claude Code**, or run `register.bat`. It adds the MCP server for your Windows user and copies the skill file. Open a new Claude Code session and ask "what is in the AI queue?". `unregister.bat` removes it.
 

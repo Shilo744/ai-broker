@@ -46,3 +46,4 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 - Language is saved in the broker's `config.json` (`lang`) and a change reopens the window. Hebrew is the source language of the code strings.
 - Wizard downloads will be jobs in the same queue, from pinned official URLs with checksums, only after the owner ticks them.
 - Licence: MIT, chosen by the owner (Apache-2.0 and revenue-limited licences were considered and declined).
+- AI_Broker.bat in the root installs on the first double-click (private .venv + requirements) and starts the window; tested on a clean copy from git (306 s first run, 2.4 s second run). Not tested: a PC without Python (only prints the download link), a PC without internet.

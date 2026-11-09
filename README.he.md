@@ -33,15 +33,9 @@
 
 ## התחלה מהירה
 
-```bat
-git clone https://github.com/Shilo744/ai-broker.git
-cd ai-broker
-py -3.12 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-bin\AI_Broker.bat
-```
+דרוש Windows ו-[Python 3.10 ומעלה](https://www.python.org/downloads/windows/) (לסמן "Add python.exe to PATH"). מורידים את הריפו (כפתור **Code** הירוק > **Download ZIP**, או `git clone https://github.com/Shilo744/ai-broker.git`) ו**לוחצים פעמיים על `AI_Broker.bat`**.
 
-החלון נפתח ומפעיל את השירות ברקע (הוא ממשיך לרוץ כשסוגרים את החלון). נתונים ויומנים ב-`%LOCALAPPDATA%\ai-broker`.
+בפעם הראשונה הוא יוצר תיקיית `.venv` פרטית לידו ומתקין את החבילות (כמה דקות, צריך אינטרנט). מהפעם השנייה הוא נפתח מיד. החלון נפתח ומפעיל את השירות ברקע (הוא ממשיך לרוץ כשסוגרים את החלון). נתונים ויומנים ב-`%LOCALAPPDATA%\ai-broker`.
 
 חיבור Claude Code (לא חובה): **הגדרות (גלגל שיניים) > Claude > חבר את Claude Code**, או `register.bat`. זה מוסיף את שרת ה-MCP למשתמש ה-Windows שלך ומעתיק את קובץ ההוראות. פותחים סשן חדש של Claude Code ושואלים ״מה יש בתור ה-AI?״. `unregister.bat` מסיר.
 

@@ -1,3 +1,3 @@
 @echo off
-set "PYTHONPATH=%~dp0.."
-start "" "%~dp0..\.venv\Scripts\pythonw.exe" -m aibroker.gui
+rem Kept for old shortcuts: the real launcher (it installs on the first run) is AI_Broker.bat in the folder above.
+call "%~dp0..\AI_Broker.bat"
