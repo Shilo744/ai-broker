@@ -1,5 +1,5 @@
 """UI smoke test: drives the window like a user (paste, recall, send-to, zoom, toasts, palette targets, layout save). Run from the repo root:
-  .venv\Scripts\python.exe tests\ui_smoke.py"""
+  python tests/ui_smoke.py   (with the project venv)"""
 import sys, os, traceback
 sys.path.insert(0, ".")
 from PySide6 import QtWidgets as W, QtCore, QtGui, QtTest
