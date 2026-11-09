@@ -2,12 +2,13 @@
   python tests/ui_smoke.py   (with the project venv)"""
 import sys, os, traceback
 sys.path.insert(0, ".")
+import sandbox          # FIRST: throw-away data folder and Qt settings, the test never edits the real chat history or window layout
 from PySide6 import QtWidgets as W, QtCore, QtGui, QtTest
 from PySide6.QtCore import Qt
 from aibroker import gui, client
 sys.excepthook = lambda *a: (traceback.print_exception(*a), sys.stdout.flush())
 app = W.QApplication([]); app.setStyle("Fusion"); app.setLayoutDirection(Qt.RightToLeft); app.setStyleSheet(gui.QSS)
-client.start_daemon()
+sandbox.require_running_broker()
 win = gui.Main(tray=False, model="qwen_edit"); win.persist = False; win.resize(1400, 880); win.show()
 res = []
 def check(name, cond): res.append((name, bool(cond))); print(("PASS " if cond else "FAIL ") + name, flush=True)

@@ -3,10 +3,12 @@
 import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import sandbox          # FIRST: throw-away data folder and Qt settings (the real service is still used, so these tests spend real model time)
 from PySide6 import QtWidgets as W, QtCore
 from PySide6.QtCore import Qt
 from aibroker import gui
 
+sandbox.require_running_broker()
 app = W.QApplication([])
 app.setStyle("Fusion")
 app.setLayoutDirection(Qt.RightToLeft)

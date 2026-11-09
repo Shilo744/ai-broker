@@ -1016,11 +1016,13 @@ class ChatPanel(W.QFrame):
         self.adv_btn.setVisible(has_text)
         if cfg and cfg.get("text"):
             self.recall = [str((j.get("params") or {}).get(cfg["text"]) or "") for j in jobs if (j.get("params") or {}).get(cfg["text"])]
-        if not jobs and g:
+        empty = not jobs and g
+        if empty:
+            self.col.addStretch(3)             # the start card floats a little above the middle of the free area, not glued to the top
             self.col.addWidget(centered(self.onboarding(g, cfg)))
         for j in jobs:
             self.add_job(j, cfg)
-        self.col.addStretch(1)
+        self.col.addStretch(4 if empty else 1)
         if jobs:
             QtCore.QTimer.singleShot(30, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))
         else:
