@@ -140,4 +140,4 @@ Windows only. The service listens on localhost without authentication (any proce
 
 ## License
 
-The license of this repository has not been chosen yet. Third-party components and their licenses are listed in [LICENSES.md](LICENSES.md).
+AI Broker is released under the [MIT License](LICENSE). Third-party components and their licenses are listed in [LICENSES.md](LICENSES.md).
