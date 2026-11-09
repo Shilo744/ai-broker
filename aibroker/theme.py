@@ -58,6 +58,8 @@ QSlider::groove:horizontal { height: 3px; background: #43454a; border-radius: 1p
 QSlider::handle:horizontal { background: #dfe1e5; width: 12px; margin: -5px 0; border-radius: 6px; }
 QCheckBox { spacing: 8px; padding: 2px 0; } QCheckBox::indicator { width: 15px; height: 15px; border: 1px solid #4e5157; border-radius: 3px; background: #1e1f22; }
 QCheckBox::indicator:checked { background: #3574f0; border-color: #3574f0; }
+QRadioButton { spacing: 8px; padding: 2px 0; } QRadioButton::indicator { width: 14px; height: 14px; border: 2px solid #6f737a; border-radius: 9px; background: transparent; }
+QRadioButton::indicator:checked { border: 2px solid #3574f0; background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #3574f0, stop:0.45 #3574f0, stop:0.5 transparent, stop:1 transparent); }
 QStatusBar { background: #2b2d30; border-top: 1px solid #393b40; } QStatusBar QLabel { padding: 0 10px; font-size: 9.5pt; color: #868a91; }
 QProgressBar { border: none; border-radius: 1px; background: #393b40; max-height: 3px; min-height: 3px; } QProgressBar::chunk { background: #3574f0; border-radius: 1px; }
 QScrollBar:vertical { background: transparent; width: 9px; } QScrollBar::handle:vertical { background: #4e5157; border-radius: 3px; min-height: 30px; margin: 1px; }

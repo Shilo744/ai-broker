@@ -1437,19 +1437,22 @@ class AssistantPanel(W.QFrame):
         self.level_btn.setText(T("הרשאות: ") + label)
         self.level_btn.setToolTip(next((T(long) for k, _l, _s, long in permissions.LEVELS if k == self.level), "") + T("\n\nלחץ כדי לבחור רמה אחרת."))
 
+    def apply_level(self, key):
+        """Called by the dialog at the moment the owner clicks a level: tell the broker, update the button."""
+        try:
+            r = client.call({"op": "assistant_level", "set": key}, timeout=5)
+        except client.BrokerDown:
+            r = None
+        if r and r.get("ok"):
+            self.level = r["level"]
+            self.set_level_label()
+            self.main.toast(T("רמת ההרשאות של Claude: ") + next(T(l) for k, l, *_ in permissions.LEVELS if k == self.level), "ok")
+            return True
+        self.main.toast(T("לא הצלחתי לשנות את רמת ההרשאות (השירות לא עונה)"), "bad")
+        return False
+
     def choose_level(self):
-        dlg = LevelDialog(self.main, self.level, self.qs)
-        if dlg.exec() == W.QDialog.Accepted and dlg.choice != self.level:
-            try:
-                r = client.call({"op": "assistant_level", "set": dlg.choice}, timeout=5)
-            except client.BrokerDown:
-                r = None
-            if r and r.get("ok"):
-                self.level = r["level"]
-                self.set_level_label()
-                self.main.toast(T("רמת ההרשאות של Claude: ") + next(T(l) for k, l, *_ in permissions.LEVELS if k == self.level), "ok")
-            else:
-                self.main.toast(T("לא הצלחתי לשנות את רמת ההרשאות (השירות לא עונה)"), "bad")
+        LevelDialog(self.main, self.level, self.qs, self.apply_level).exec()
 
     def on_perms(self, perms, level=None):
         """Called with every state update: the broker's questions that wait for the owner (and his current permission level)."""
@@ -1528,12 +1531,44 @@ class AssistantPanel(W.QFrame):
         self.finish_perm(pid, (T("אישרת") if ok else T("דחית")) if r and r.get("ok") else T("לא הצלחתי לשלוח את התשובה (Claude כבר לא מחכה)"))
 
 
+class ClickCard(W.QFrame):
+    """A card that is clickable everywhere (not only on its small radio button) and shows a hover state."""
+    clicked = QtCore.Signal()
+    hovered = QtCore.Signal(bool)
+
+    def __init__(self):
+        super().__init__()
+        self.setCursor(Qt.PointingHandCursor)
+        self.setAttribute(Qt.WA_Hover, True)
+        self._down = False
+
+    def mousePressEvent(self, e):
+        self._down = e.button() == Qt.LeftButton
+        super().mousePressEvent(e)
+
+    def mouseReleaseEvent(self, e):
+        if self._down and e.button() == Qt.LeftButton and self.rect().contains(e.position().toPoint()):
+            self.clicked.emit()
+        self._down = False
+        super().mouseReleaseEvent(e)
+
+    def enterEvent(self, e):
+        self.hovered.emit(True)
+        super().enterEvent(e)
+
+    def leaveEvent(self, e):
+        self.hovered.emit(False)
+        super().leaveEvent(e)
+
+
 class LevelDialog(W.QDialog):
-    """How much may Claude do without asking? Three levels, each explained in plain Hebrew. The owner chooses; the choice applies at once."""
-    def __init__(self, parent, current, qs):
+    """How much may Claude do without asking? Three levels, each explained in plain words. A click anywhere on a card chooses it and it applies at once."""
+    def __init__(self, parent, current, qs, apply):
         super().__init__(parent)
         self.qs = qs
         self.choice = current
+        self.apply = apply                          # callable(key) -> bool: tells the broker at once
+        self.hover = {}
         self.setWindowTitle(T("רמת ההרשאות של Claude"))
         self.setMinimumWidth(560)
         v = W.QVBoxLayout(self)
@@ -1548,18 +1583,24 @@ class LevelDialog(W.QDialog):
         self.cards = {}
         self.group = W.QButtonGroup(self)
         for key, label, short, long in permissions.LEVELS:
-            card = W.QFrame()
+            card = ClickCard()
             card.setObjectName("levelcard")
             cl = W.QVBoxLayout(card)
             cl.setContentsMargins(14, 10, 14, 12)
             cl.setSpacing(4)
             rb = W.QRadioButton("%s  -  %s%s" % (T(label), T(short), T("   (מומלץ)") if key == "normal" else ""))
             rb.setStyleSheet("font-weight: 600; font-size: 10.5pt;")
+            rb.setAttribute(Qt.WA_TransparentForMouseEvents, True)          # the whole card takes the click
             rb.setChecked(key == current)
             self.group.addButton(rb)
             cl.addWidget(rb)
-            cl.addWidget(MessageView(T(long), max_width=520, muted=True))
-            rb.toggled.connect(lambda on, k=key: on and self.pick(k))
+            desc = MessageView(T(long), max_width=520, muted=True)
+            desc.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            desc.viewport().setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            cl.addWidget(desc)
+            card.clicked.connect(lambda k=key: self.pick(k))
+            card.hovered.connect(lambda on, k=key: (self.hover.__setitem__(k, on), self.paint()))
+            rb.toggled.connect(lambda on, k=key: on and self.pick(k))        # arrow keys on the focused radio button
             self.cards[key] = (card, rb)
             v.addWidget(card)
         note = MessageView(T("חסום תמיד, בכל רמה: פירמוט דיסקים, שינוי רישום המערכת והגדרות האבטחה, וההגדרות של Claude עצמו."), max_width=520, muted=True)
@@ -1573,7 +1614,16 @@ class LevelDialog(W.QDialog):
         v.addLayout(row)
         self.paint()
 
+    def sync(self):
+        for key, (_card, rb) in self.cards.items():
+            rb.blockSignals(True)
+            rb.setChecked(key == self.choice)
+            rb.blockSignals(False)
+        self.paint()
+
     def pick(self, key):
+        if key == self.choice:
+            return
         if key == "free" and not self.qs.value("free_confirmed"):
             m = W.QMessageBox(self)
             m.setWindowTitle(T("רמה חופשית"))
@@ -1584,16 +1634,20 @@ class LevelDialog(W.QDialog):
             m.addButton(T("ביטול"), W.QMessageBox.RejectRole)
             m.exec()
             if m.clickedButton() is not yes:
-                self.cards[self.choice][1].setChecked(True)
+                self.sync()
                 return
             self.qs.setValue("free_confirmed", True)
+        if self.apply and not self.apply(key):
+            self.sync()
+            return
         self.choice = key
-        self.paint()
+        self.sync()
 
     def paint(self):
         for key, (card, _rb) in self.cards.items():
             on = key == self.choice
-            card.setStyleSheet("QFrame#levelcard { background: %s; border: 1px solid %s; border-radius: 6px; }" % ("#233350" if on else "#2b2d30", "#3574f0" if on else "#393b40"))
+            bg = "#233350" if on else ("#34373c" if self.hover.get(key) else "#2b2d30")
+            card.setStyleSheet("QFrame#levelcard { background: %s; border: 1px solid %s; border-radius: 6px; }" % (bg, "#3574f0" if on else ("#5a5d63" if self.hover.get(key) else "#393b40")))
 
 
 class LimitsPopup(W.QFrame):

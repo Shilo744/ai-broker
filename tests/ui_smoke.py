@@ -46,6 +46,14 @@ def run():
     win.assistant_panel.start_turn = lambda message, extra: sent.update(message=message)
     win.select_model("sound"); win.chat.edit.setPlainText("make a door sound"); win.chat.send()
     check("page without interface routes to the assistant", win.assistant_mode and "moss_sound" in sent.get("message", ""))
+    # 11) a permission-level card takes a click anywhere on it (the owner could only hit the tiny radio button before)
+    got = []
+    dlg = gui.LevelDialog(win, "normal", QtCore.QSettings("ai-broker", "assistant"), lambda k: (got.append(k), True)[1])
+    dlg.show()
+    card, _rb = dlg.cards["careful"]
+    QtTest.QTest.mouseClick(card, Qt.LeftButton, Qt.NoModifier, card.rect().center() + QtCore.QPoint(0, 18))
+    check("level card: a click on its text chooses it and applies it", dlg.choice == "careful" and got == ["careful"])
+    dlg.close()
     print("RESULT %d/%d" % (sum(1 for _, ok in res if ok), len(res)), flush=True)
     app.quit()
 QtCore.QTimer.singleShot(3500, run)
