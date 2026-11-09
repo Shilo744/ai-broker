@@ -463,7 +463,7 @@ class Main(W.QMainWindow):
         m.addAction("Start broker service", lambda: self.run_safe(client.start_daemon))
         m.addAction("Stop broker service (running jobs keep running)", self.stop_broker)
         m = mb.addMenu("&Help")
-        m.addAction("Switch to the SIMPLE view (big cards, Hebrew)", self.switch_view)
+        m.addAction("Switch to the simple view (Hebrew cards)", self.switch_view)
         m.addAction("About", lambda: W.QMessageBox.about(self, "AI Broker", "AI Broker 1.0\nOne queue for all local AI/GPU jobs.\nPySide6 (Qt, LGPL-3) + psutil."))
 
     def switch_view(self):
