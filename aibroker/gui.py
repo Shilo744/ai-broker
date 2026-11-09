@@ -1,7 +1,8 @@
-"""AI Broker window: simple, big, friendly (Hebrew, right-to-left). Cards with pictures instead of tables.
-Pages: Now (what runs, what waits, how the computer feels) / Add a job (big picture tiles) / History / Advanced (limits, log).
+"""AI Broker desktop window (PySide6 / Qt 6): dark IDE-style main window with dockable tool windows.
+Left: Job Library.  Centre: Queue.  Right: Resources (+ limits).  Bottom tabs: Log / Output / History.  Status bar, tray icon, toolbar.
 The window is only a client of the broker service: closing it never stops the queue.
-  python -m aibroker.gui [--screenshot out.png] [--page 0..3] [--size 1280x860] [--no-tray]"""
+  python -m aibroker.gui [--screenshot out.png] [--size 1500x900] [--no-tray]"""
+import collections
 import json
 import os
 import sys
@@ -13,39 +14,39 @@ from PySide6.QtCore import Qt
 from . import client, paths
 
 QSS = """
-* { font-family: 'Segoe UI'; font-size: 13pt; color: #1f2937; }
-QMainWindow, QDialog, QWidget#page { background: #f3f5f9; }
-QScrollArea { border: none; background: transparent; } QScrollArea > QWidget > QWidget { background: transparent; }
-QFrame#card { background: white; border: 1px solid #e3e7ee; border-radius: 16px; }
-QFrame#tile { background: white; border: 2px solid #e3e7ee; border-radius: 18px; }
-QFrame#tile:hover { border-color: #3b82f6; background: #f7faff; }
-QLabel#h1 { font-size: 22pt; font-weight: 700; } QLabel#h2 { font-size: 17pt; font-weight: 700; padding-top: 6px; }
-QLabel#muted { color: #6b7280; font-size: 12pt; } QLabel#big { font-size: 15pt; font-weight: 700; }
-QLabel#chip { border-radius: 9px; padding: 1px 10px; font-size: 11pt; font-weight: 600; }
-QPushButton { background: white; border: 2px solid #d5dbe5; border-radius: 14px; padding: 10px 20px; font-weight: 600; }
-QPushButton:hover { border-color: #3b82f6; background: #f2f7ff; }
-QPushButton#nav { border: none; background: transparent; font-size: 15pt; padding: 12px 26px; color: #4b5563; border-radius: 12px; }
-QPushButton#nav:checked { background: #1f2937; color: white; } QPushButton#nav:checked:hover { background: #1f2937; }
-QPushButton#primary { background: #3b82f6; border-color: #3b82f6; color: white; } QPushButton#primary:hover { background: #2f6fdb; }
-QPushButton#danger { color: #b91c1c; } QPushButton#round { border-radius: 22px; min-width: 44px; max-width: 44px; min-height: 44px; max-height: 44px; padding: 0; font-size: 15pt; }
-QPushButton#bigplay { font-size: 17pt; padding: 16px 28px; border-radius: 18px; }
-QPushButton#bigplay:checked { background: #dc2626; border-color: #dc2626; color: white; }
-QPushButton#bigpause { font-size: 17pt; padding: 16px 28px; border-radius: 18px; }
-QPushButton#bigpause:checked { background: #f59e0b; border-color: #f59e0b; color: white; }
-QProgressBar { border: none; border-radius: 5px; background: #e5e9f0; max-height: 10px; min-height: 10px; } QProgressBar::chunk { background: #3b82f6; border-radius: 5px; }
-QLineEdit, QSpinBox, QDoubleSpinBox { background: white; border: 2px solid #d5dbe5; border-radius: 10px; padding: 8px 10px; font-size: 13pt; }
-QPlainTextEdit { background: #111827; color: #d1d5db; border-radius: 12px; font-family: Consolas; font-size: 11pt; padding: 8px; }
-QSlider::groove:horizontal { height: 8px; background: #dfe4ec; border-radius: 4px; } QSlider::sub-page:horizontal { background: #3b82f6; border-radius: 4px; }
-QSlider::handle:horizontal { background: white; border: 3px solid #3b82f6; width: 18px; margin: -8px 0; border-radius: 12px; }
-QCheckBox { spacing: 10px; padding: 4px 0; } QCheckBox::indicator { width: 22px; height: 22px; border: 2px solid #b6bfcc; border-radius: 6px; background: white; }
-QCheckBox::indicator:checked { background: #3b82f6; border-color: #3b82f6; }
-QStatusBar { background: white; border-top: 1px solid #e3e7ee; } QStatusBar QLabel { padding: 0 14px; font-size: 11pt; color: #6b7280; }
-QScrollBar:vertical { background: transparent; width: 12px; } QScrollBar::handle:vertical { background: #cbd2dd; border-radius: 6px; min-height: 30px; }
-QScrollBar::add-line, QScrollBar::sub-line { height: 0; }
-QToolTip { background: #1f2937; color: white; border: none; padding: 6px; }
+* { font-family: 'Segoe UI'; font-size: 11pt; color: #cfd3d6; }
+QMainWindow, QDialog { background: #2b2b2b; }
+QMainWindow::separator { background: #3c3f41; width: 3px; height: 3px; }
+QMenuBar { background: #3c3f41; } QMenuBar::item:selected { background: #4b6eaf; }
+QMenu { background: #3c3f41; border: 1px solid #515151; } QMenu::item:selected { background: #4b6eaf; } QMenu::separator { height: 1px; background: #515151; margin: 3px 6px; }
+QToolBar { background: #3c3f41; border: none; border-bottom: 1px solid #323232; spacing: 4px; padding: 3px; }
+QToolButton { background: transparent; border: 1px solid transparent; border-radius: 3px; padding: 4px 9px; }
+QToolButton:hover { background: #4c5052; border-color: #5e6060; } QToolButton:checked { background: #4b6eaf; color: white; }
+QToolButton#play:checked { background: #a8321f; color: white; font-weight: bold; }
+QToolButton#play { font-weight: bold; padding: 4px 14px; border: 1px solid #5e6060; }
+QDockWidget { titlebar-close-icon: none; color: #bbbbbb; }
+QDockWidget::title { background: #3c3f41; padding: 5px 8px; border-bottom: 1px solid #323232; font-weight: bold; }
+QTabBar::tab { background: #3c3f41; padding: 5px 14px; border: 1px solid #323232; border-bottom: none; }
+QTabBar::tab:selected { background: #2b2b2b; border-top: 2px solid #4b6eaf; color: #ffffff; }
+QTableWidget, QTreeWidget, QPlainTextEdit, QListWidget, QTextEdit { background: #2b2b2b; alternate-background-color: #313335; border: none; gridline-color: #323232;
+    selection-background-color: #2f65ca; selection-color: white; }
+QPlainTextEdit, QTextEdit { font-family: Consolas; font-size: 10.5pt; color: #a9b7c6; }
+QHeaderView::section { background: #3c3f41; color: #bbbbbb; border: none; border-right: 1px solid #323232; border-bottom: 1px solid #323232; padding: 4px 6px; }
+QPushButton { background: #4c5052; border: 1px solid #5e6060; border-radius: 3px; padding: 4px 12px; } QPushButton:hover { background: #5a5e60; }
+QPushButton:default { background: #365880; border-color: #4b6eaf; }
+QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox { background: #45494a; border: 1px solid #646464; border-radius: 2px; padding: 2px 4px; color: #dddddd; selection-background-color: #2f65ca; }
+QSlider::groove:horizontal { height: 4px; background: #515151; border-radius: 2px; } QSlider::sub-page:horizontal { background: #4b6eaf; border-radius: 2px; }
+QSlider::handle:horizontal { background: #bbbbbb; width: 12px; margin: -5px 0; border-radius: 6px; }
+QStatusBar { background: #3c3f41; border-top: 1px solid #323232; } QStatusBar::item { border: none; }
+QStatusBar QLabel { padding: 0 8px; }
+QGroupBox { border: 1px solid #4a4a4a; border-radius: 3px; margin-top: 10px; padding-top: 8px; } QGroupBox::title { subcontrol-origin: margin; left: 8px; padding: 0 4px; color: #8c8c8c; }
+QCheckBox::indicator { width: 13px; height: 13px; background: #45494a; border: 1px solid #646464; border-radius: 2px; } QCheckBox::indicator:checked { background: #4b6eaf; border-color: #6b8ecf; } QScrollBar:vertical { background: #2b2b2b; width: 11px; } QScrollBar::handle:vertical { background: #4a4d4f; min-height: 24px; border-radius: 4px; }
+QScrollBar:horizontal { background: #2b2b2b; height: 11px; } QScrollBar::handle:horizontal { background: #4a4d4f; min-width: 24px; border-radius: 4px; }
+QScrollBar::add-line, QScrollBar::sub-line { width: 0; height: 0; }
+QToolTip { background: #3c3f41; color: #dddddd; border: 1px solid #646464; }
 """
 
-EMOJI = "Segoe UI Emoji"
+STATE_COLOR = {"running": "#6a9955", "paused": "#d7ba7d", "queued": "#9aa5b1", "done": "#6a9955", "failed": "#e06c75", "cancelled": "#8c8c8c", "lost": "#d19a66"}
 
 
 def fmt_dur(s):
@@ -53,40 +54,17 @@ def fmt_dur(s):
     return "%d:%02d:%02d" % (s // 3600, s % 3600 // 60, s % 60) if s >= 3600 else "%d:%02d" % (s // 60, s % 60)
 
 
-def he_reason(r):
-    if not r:
-        return "מתחילה תיכף"
-    table = (("RAM budget", "אין כרגע מספיק זיכרון פנוי לעבודה הזו"), ("VRAM budget", "כרטיס המסך עסוק, מחכה שיתפנה מקום"),
-             ("free RAM", "הזיכרון של המחשב נמוך, מחכה שיתפנה"), ("free commit", "הזיכרון של המחשב נמוך, מחכה שיתפנה"),
-             ("paused", "הכול מושהה"), ("I am playing", "אתה משחק, אז עבודות כרטיס המסך מחכות"), ("held", "עצרת אותה בעצמך"),
-             ("max concurrent", "כבר רצות הרבה עבודות במקביל"), ("another", "עבודה מאותו סוג כבר רצה"), ("GPU lock", "תוכנה אחרת משתמשת בכרטיס המסך"),
-             ("a self-locking", "מצלמים עכשיו את המשחק, מחכה שיסתיים"), ("visual run", "עבודה של כרטיס המסך רצה עכשיו, מחכה לתור"),
-             ("BRAKE", "המחשב בלחץ, עצרתי הכול לבטיחות"), ("starvation", "העבודה הראשונה מחכה הרבה זמן, אף אחד לא עוקף אותה"),
-             ("waiting for the job", "מחכה לעבודה אחרת שתסתיים"), ("backfill", "מחכה לעבודה שלפניה"))
-    for k, v in table:
-        if r.startswith(k) or k in r[:24]:
-            return v
-    return r
-
-
-def icon_badge(emoji, color, size=64):
-    lab = W.QLabel(emoji)
-    lab.setFixedSize(size, size)
-    lab.setAlignment(Qt.AlignCenter)
-    lab.setStyleSheet("background:%s; border-radius:%dpx; font-family:'%s'; font-size:%dpt; color:white;" % (color, size // 3, EMOJI, size // 2 - 6))
-    return lab
-
-
-def make_icon(color="#3b82f6"):
+def make_icon(color="#4b6eaf"):
     pm = QtGui.QPixmap(64, 64)
     pm.fill(Qt.transparent)
     p = QtGui.QPainter(pm)
     p.setRenderHint(QtGui.QPainter.Antialiasing)
     p.setBrush(QtGui.QColor(color))
     p.setPen(Qt.NoPen)
-    p.drawRoundedRect(2, 2, 60, 60, 18, 18)
+    p.drawRoundedRect(4, 4, 56, 56, 12, 12)
     p.setPen(QtGui.QColor("white"))
-    p.setFont(QtGui.QFont("Segoe UI", 26, QtGui.QFont.Bold))
+    f = QtGui.QFont("Segoe UI", 24, QtGui.QFont.Bold)
+    p.setFont(f)
     p.drawText(pm.rect(), Qt.AlignCenter, "AI")
     p.end()
     return QtGui.QIcon(pm)
@@ -115,785 +93,664 @@ class Poller(QtCore.QThread):
                 self.msleep(100)
 
 
-def chip(text, bg, fg="white"):
-    c = W.QLabel(text)
-    c.setObjectName("chip")
-    c.setStyleSheet("background:%s; color:%s;" % (bg, fg))
-    c.setAlignment(Qt.AlignCenter)
-    return c
-
-
-def weight_chip(ram):
-    if ram >= 20:
-        return chip("כבד מאוד", "#fee2e2", "#b91c1c")
-    if ram >= 8:
-        return chip("בינוני", "#fef3c7", "#92400e")
-    return chip("קל", "#dcfce7", "#166534")
-
-
-class Bar(W.QFrame):
-    def __init__(self):
+class Gauge(W.QWidget):
+    """Horizontal bar with caption, optional limit marker and a sparkline of the last 2 minutes."""
+    def __init__(self, title, unit="GB", limit_marker=True):
         super().__init__()
-        self.f, self.color = 0.0, "#22c55e"
+        self.title, self.unit = title, unit
+        self.value = self.maximum = 0.0
+        self.marker = None
+        self.hist = collections.deque(maxlen=120)
+        self.text = ""
+        self.setMinimumHeight(58)
+
+    def set(self, value, maximum, marker=None, text=None):
+        self.value, self.maximum, self.marker = value, max(maximum, 1e-9), marker
+        self.text = text if text is not None else "%.1f / %.0f %s" % (value, maximum, self.unit)
+        self.hist.append(value / self.maximum)
+        self.update()
 
     def paintEvent(self, e):
         p = QtGui.QPainter(self)
         p.setRenderHint(QtGui.QPainter.Antialiasing)
         w, h = self.width(), self.height()
+        p.setPen(QtGui.QColor("#bbbbbb"))
+        f0 = p.font()
+        f0.setPointSize(11)
+        p.setFont(f0)
+        p.drawText(0, 15, self.title)
+        p.drawText(QtCore.QRect(0, 0, w, 18), Qt.AlignRight, self.text)
+        bar = QtCore.QRectF(0, 24, w, 14)
         p.setPen(Qt.NoPen)
-        p.setBrush(QtGui.QColor("#e5e9f0"))
-        p.drawRoundedRect(0, 0, w, h, 9, 9)
-        if self.f > 0:
-            p.setBrush(QtGui.QColor(self.color))
-            fw = max(h, w * self.f)
-            x = w - fw if self.layoutDirection() == Qt.RightToLeft else 0
-            p.drawRoundedRect(QtCore.QRectF(x, 0, fw, h), 9, 9)
+        p.setBrush(QtGui.QColor("#3c3f41"))
+        p.drawRoundedRect(bar, 3, 3)
+        f = max(0.0, min(1.0, self.value / self.maximum))
+        col = "#6a9955" if f < 0.7 else "#d7ba7d" if f < 0.88 else "#e06c75"
+        p.setBrush(QtGui.QColor(col))
+        p.drawRoundedRect(QtCore.QRectF(0, 24, w * f, 14), 3, 3)
+        if self.marker is not None:
+            x = w * min(1.0, self.marker / self.maximum)
+            p.setPen(QtGui.QPen(QtGui.QColor("#4b9fff"), 2))
+            p.drawLine(QtCore.QPointF(x, 21), QtCore.QPointF(x, 41))
+        if len(self.hist) > 1:
+            pts = [QtCore.QPointF(i * w / 119.0, h - 2 - min(1.0, v) * 12) for i, v in enumerate(self.hist)]
+            p.setPen(QtGui.QPen(QtGui.QColor("#5c7fb8"), 1))
+            p.drawPolyline(pts)
 
 
-class Gauge(W.QFrame):
-    """One big friendly meter: caption, numbers, thick bar, a word (calm / busy / full)."""
-    def __init__(self, emoji, caption):
-        super().__init__()
-        self.setObjectName("card")
-        self.f = 0.0
-        self.setMinimumHeight(118)
-        lay = W.QHBoxLayout(self)
-        lay.setContentsMargins(16, 12, 16, 12)
-        lay.addWidget(icon_badge(emoji, "#64748b", 52), 0, Qt.AlignTop)
-        col = W.QVBoxLayout()
-        self.cap = W.QLabel(caption)
-        self.cap.setObjectName("big")
-        self.num = W.QLabel("")
-        self.num.setObjectName("muted")
-        self.bar = Bar()
-        self.bar.setFixedHeight(18)
-        self.word = W.QLabel("")
-        self.word.setStyleSheet("font-weight:700;")
-        col.addWidget(self.cap)
-        col.addWidget(self.num)
-        col.addWidget(self.bar)
-        col.addWidget(self.word)
-        lay.addLayout(col, 1)
+class QueueTable(W.QTableWidget):
+    COLS = ["#", "Job", "Requester", "Model", "Est RAM", "Est VRAM", "State", "Time", "Live / why waiting"]
+    reorder = QtCore.Signal(list, int)
 
-    def set(self, used, total, num_text):
-        f = max(0.0, min(1.0, used / total if total else 0))
-        self.f = f
-        self.num.setText(num_text)
-        color, word = ("#22c55e", "רגוע") if f < 0.6 else ("#f59e0b", "עמוס") if f < 0.85 else ("#ef4444", "כמעט מלא")
-        self.word.setText(word)
-        self.word.setStyleSheet("font-weight:700; color:%s;" % color)
-        self.bar.f, self.bar.color = f, color
-        self.bar.update()
+    def __init__(self):
+        super().__init__(0, len(self.COLS))
+        self.setHorizontalHeaderLabels(self.COLS)
+        self.verticalHeader().hide()
+        self.verticalHeader().setDefaultSectionSize(34)
+        self.setAlternatingRowColors(True)
+        self.setSelectionBehavior(W.QAbstractItemView.SelectRows)
+        self.setSelectionMode(W.QAbstractItemView.ExtendedSelection)
+        self.setEditTriggers(W.QAbstractItemView.NoEditTriggers)
+        self.setShowGrid(False)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setDragDropMode(W.QAbstractItemView.DragDrop)
+        self.setDefaultDropAction(Qt.CopyAction)            # we move jobs ourselves; Qt must not move/clear the cells
+        hh = self.horizontalHeader()
+        hh.setStretchLastSection(True)
+        for i, wd in enumerate((40, 250, 100, 170, 80, 80, 100, 70)):
+            self.setColumnWidth(i, wd)
+        self.job_ids = []
+        self.queued_ids = []
 
-
-class JobCard(W.QFrame):
-    """A job as a card: picture, plain name, who asked, what it is doing / why it waits, buttons."""
-    def __init__(self, kind, act, types):
-        super().__init__()
-        self.kind, self.act, self.types = kind, act, types
-        self.setObjectName("card")
-        self.jid = None
-        self.badge = None
-        lay = W.QHBoxLayout(self)
-        lay.setContentsMargins(16, 14, 16, 14)
-        lay.setSpacing(16)
-        self.num = W.QLabel("")
-        self.num.setStyleSheet("font-size:22pt; font-weight:800; color:#94a3b8;")
-        self.num.setFixedWidth(44)
-        self.num.setAlignment(Qt.AlignCenter)
-        if kind == "queued":
-            lay.addWidget(self.num)
-        self.badge_holder = W.QVBoxLayout()
-        lay.addLayout(self.badge_holder)
-        col = W.QVBoxLayout()
-        col.setSpacing(3)
-        top = W.QHBoxLayout()
-        self.title = W.QLabel("")
-        self.title.setObjectName("big")
-        self.chipbox = W.QHBoxLayout()
-        top.addWidget(self.title)
-        top.addLayout(self.chipbox)
-        top.addStretch(1)
-        self.sub = W.QLabel("")
-        self.sub.setObjectName("muted")
-        self.line = W.QLabel("")
-        self.line.setWordWrap(True)
-        col.addLayout(top)
-        col.addWidget(self.sub)
-        col.addWidget(self.line)
-        self.pb = W.QProgressBar()
-        self.pb.setRange(0, 0)
-        self.pb.setTextVisible(False)
-        if kind == "running":
-            col.addWidget(self.pb)
-        lay.addLayout(col, 1)
-        self.btns = W.QHBoxLayout()
-        lay.addLayout(self.btns)
-        self.b = {}
-
-    def _btn(self, key, text, tip, slot, style="round"):
-        b = W.QPushButton(text)
-        b.setObjectName(style)
-        b.setToolTip(tip)
-        b.setCursor(Qt.PointingHandCursor)
-        b.clicked.connect(slot)
-        self.btns.addWidget(b)
-        self.b[key] = b
-        return b
-
-    def build_buttons(self):
-        if self.kind == "queued":
-            self._btn("top", "⏫", "להריץ ראשונה", lambda: self.act({"op": "move", "ids": [self.jid], "to": "top"}))
-            self._btn("up", "▲", "להקדים בתור", lambda: self.act({"op": "move", "ids": [self.jid], "to": "up"}))
-            self._btn("down", "▼", "לדחות בתור", lambda: self.act({"op": "move", "ids": [self.jid], "to": "down"}))
-            self._btn("hold", "⏸", "לעצור עבודה זו", lambda: self.act({"op": "job_resume" if self.held else "job_pause", "id": self.jid}))
+    def dropEvent(self, e):
+        pos = e.position().toPoint()
+        row = self.rowAt(pos.y())
+        moved = [i for i in self.selected_ids() if i in self.queued_ids]
+        if not moved or e.source() is not self:
+            e.ignore()
+            return
+        rest = [i for i in self.queued_ids if i not in moved]
+        if row < 0 or row >= len(self.job_ids):
+            at = len(rest)
         else:
-            self._btn("hold", "⏸", "להשהות עבודה זו", lambda: self.act({"op": "job_resume" if self.susp else "job_pause", "id": self.jid}))
-        self._btn("cancel", "✕", "לבטל", lambda: self.act({"op": "cancel", "id": self.jid, "confirm": True}), "round")
-        self.b["cancel"].setStyleSheet("color:#b91c1c;")
+            tid = self.job_ids[row]
+            if tid in moved:
+                e.ignore()
+                return
+            if tid in rest:
+                at = rest.index(tid) + (1 if self.dropIndicatorPosition() == W.QAbstractItemView.BelowItem else 0)
+            else:                                           # dropped on a running row: top of the queue
+                at = 0
+        e.setDropAction(Qt.CopyAction)
+        e.accept()
+        self.reorder.emit(moved, at + 1)
 
-    def update_job(self, j, pos=None):
-        first = self.jid is None
-        self.jid = j["id"]
-        t = self.types.get(j["type"], {})
-        self.held = bool(j.get("held"))
-        self.susp = bool(j.get("suspended"))
-        if first:
-            self.badge = icon_badge(t.get("icon", "⚙️"), t.get("color", "#78909c"), 64)
-            self.badge_holder.addWidget(self.badge)
-            self.build_buttons()
-        self.title.setText(t.get("he_title") or j["name"])
-        if not self.chipbox.count():
-            self.chipbox.addWidget(weight_chip(j["est_ram"]))
-        who = "ביקש: %s" % j["requester"]
-        self.sub.setText("%s   •   %s" % (j["name"], who) if t.get("he_title") and j["name"] != t.get("title") else who)
-        if self.kind == "queued":
-            self.num.setText(str(pos))
-            self.line.setText("⏳ " + ("עצרת אותה בעצמך (לחץ ⏸ כדי לשחרר)" if self.held else he_reason(j.get("reason", ""))))
-            self.line.setStyleSheet("color:#b45309;" if j.get("reason") else "color:#166534;")
-            self.b["hold"].setText("▶" if self.held else "⏸")
-            self.b["hold"].setToolTip("לשחרר עבודה זו" if self.held else "לעצור עבודה זו")
-        else:
-            state = "מושהית" if self.susp else "עובדת"
-            self.line.setText("%s  %s   •   משתמשת ב-%.1f GB זיכרון%s" % ("⏸" if self.susp else "▶", state + " " + fmt_dur(j.get("elapsed", 0)), j.get("cur_ws", 0),
-                                                                    ("  •  %.1f GB בכרטיס המסך" % j["cur_vram"]) if j.get("cur_vram") else ""))
-            self.line.setStyleSheet("color:#1f2937;")
-            self.pb.setVisible(not self.susp)
-            self.b["hold"].setText("▶" if self.susp else "⏸")
+    def selected_ids(self):
+        return [self.job_ids[r] for r in sorted({i.row() for i in self.selectedIndexes()}) if r < len(self.job_ids)]
 
 
-class CardList(W.QWidget):
-    def __init__(self, make):
-        super().__init__()
-        self.make = make
-        self.lay = W.QVBoxLayout(self)
-        self.lay.setContentsMargins(0, 0, 0, 0)
-        self.lay.setSpacing(10)
-        self.cards = {}
-
-    def sync(self, items, update):
-        ids = [j["id"] for j in items]
-        for i in list(self.cards):
-            if i not in ids:
-                w = self.cards.pop(i)
-                self.lay.removeWidget(w)
-                w.deleteLater()
-        for idx, j in enumerate(items):
-            w = self.cards.get(j["id"])
-            if w is None:
-                w = self.cards[j["id"]] = self.make()
-            update(w, j, idx + 1)
-            if self.lay.indexOf(w) != idx:
-                self.lay.insertWidget(idx, w)
-
-
-class Tile(W.QFrame):
-    clicked = QtCore.Signal()
-
-    def __init__(self, tid, t):
-        super().__init__()
-        self.setObjectName("tile")
-        self.setCursor(Qt.PointingHandCursor)
-        self.setMinimumSize(250, 200)
-        self.setToolTip((t.get("notes") or t.get("he_desc") or "") + "\n(%s)" % t.get("title", tid))
-        lay = W.QVBoxLayout(self)
-        lay.setContentsMargins(16, 16, 16, 14)
-        top = W.QHBoxLayout()
-        top.addWidget(icon_badge(t.get("icon", "⚙️"), t.get("color", "#78909c"), 76))
-        top.addStretch(1)
-        top.addWidget(weight_chip(t.get("est", {}).get("ram_gb", 0)), 0, Qt.AlignTop)
-        lay.addLayout(top)
-        n = W.QLabel(t.get("he_title") or t.get("title", tid))
-        n.setObjectName("big")
-        n.setWordWrap(True)
-        d = W.QLabel(t.get("he_desc") or "")
-        d.setObjectName("muted")
-        d.setWordWrap(True)
-        lay.addWidget(n)
-        lay.addWidget(d)
-        lay.addStretch(1)
-        for c in self.findChildren(W.QLabel):
-            c.setAttribute(Qt.WA_TransparentForMouseEvents)
-
-    def mouseReleaseEvent(self, e):
-        if e.button() == Qt.LeftButton:
-            self.clicked.emit()
-
-
-FILE_FIELDS = {"image", "image2", "ref", "jobs", "script", "raw", "clean", "batch"}
-SAVE_FIELDS = {"out", "outdir"}
-HE_FIELD = {"image": "תמונה", "image2": "תמונה שנייה (לא חובה)", "instruction": "מה לעשות בתמונה", "out": "איפה לשמור את התוצאה", "ref": "תמונת מקור", "prompt": "תיאור במילים",
-            "scenario": "שם התרחיש", "script": "קובץ הסקריפט", "outdir": "תיקיית פלט", "raw": "הדגם הכבד", "clean": "הדגם הקל", "jobs": "קובץ הרשימה (jobs.json)",
-            "depth": "רמת פירוט (8 או 9)", "seed": "מספר אקראי", "steps": "צעדים", "secs": "אורך בשניות", "args": "פרמטרים נוספים", "batch": "קובץ אצווה (לא חובה)"}
-
-
-class JobDialog(W.QDialog):
-    def __init__(self, parent, tid, t):
+class NewJobDialog(W.QDialog):
+    def __init__(self, parent, tid, t, requester):
         super().__init__(parent)
-        self.t, self.tid, self.edits = t, tid, {}
-        self.setWindowTitle(t.get("he_title") or t.get("title", tid))
-        self.setMinimumWidth(680)
-        self.setLayoutDirection(Qt.RightToLeft)
+        self.t, self.edits = t, {}
+        self.setWindowTitle("New job: " + t.get("title", tid))
+        self.setMinimumWidth(560)
         lay = W.QVBoxLayout(self)
-        lay.setSpacing(12)
-        head = W.QHBoxLayout()
-        head.addWidget(icon_badge(t.get("icon", "⚙️"), t.get("color", "#78909c"), 72))
-        c = W.QVBoxLayout()
-        h = W.QLabel(t.get("he_title") or t.get("title", tid))
-        h.setObjectName("h1")
-        d = W.QLabel(t.get("he_desc") or "")
-        d.setObjectName("muted")
-        c.addWidget(h)
-        c.addWidget(d)
-        head.addLayout(c, 1)
-        lay.addLayout(head)
+        if t.get("notes"):
+            n = W.QLabel(t["notes"])
+            n.setWordWrap(True)
+            n.setStyleSheet("color:#8c8c8c")
+            lay.addWidget(n)
         form = W.QFormLayout()
-        form.setVerticalSpacing(10)
         self.name = W.QLineEdit()
-        self.name.setPlaceholderText("שם לעבודה (לא חובה)")
-        form.addRow("שם", self.name)
+        self.name.setPlaceholderText(t.get("title", tid))
+        self.req = W.QLineEdit(requester)
+        form.addRow("Name", self.name)
+        form.addRow("Requester", self.req)
         for k, spec in (t.get("params") or {}).items():
             d = spec.get("default") if isinstance(spec, dict) else spec
-            req = isinstance(spec, dict) and spec.get("required")
             e = W.QLineEdit("" if d is None else (json.dumps(d) if isinstance(d, (list, dict)) else str(d)))
-            e.setLayoutDirection(Qt.LeftToRight)
-            row = W.QHBoxLayout()
-            row.addWidget(e, 1)
-            if k in FILE_FIELDS or k in SAVE_FIELDS:
-                b = W.QPushButton("בחר…")
-                b.clicked.connect(lambda _=False, ed=e, kk=k: self.browse(ed, kk))
-                row.addWidget(b)
-            form.addRow(HE_FIELD.get(k, k) + (" *" if req else ""), row)
+            if isinstance(spec, dict) and spec.get("help"):
+                e.setToolTip(spec["help"])
+                e.setPlaceholderText(spec["help"])
+            lbl = k + (" *" if isinstance(spec, dict) and spec.get("required") else "")
+            form.addRow(lbl, e)
             self.edits[k] = e
         if tid == "custom":
             self.cmd = W.QLineEdit()
-            self.cmd.setLayoutDirection(Qt.LeftToRight)
-            self.cmd.setPlaceholderText("python script.py --x 1")
-            form.addRow("הפקודה *", self.cmd)
-        lay.addLayout(form)
-        self.more = W.QCheckBox("לקבוע בעצמי כמה משאבים העבודה צריכה (בדרך כלל לא צריך, המערכת לומדת לבד)")
-        lay.addWidget(self.more)
-        self.est = W.QWidget()
-        el = W.QHBoxLayout(self.est)
+            self.cmd.setPlaceholderText("command line, e.g. python script.py --x 1")
+            form.addRow("Command *", self.cmd)
         self.ram = W.QDoubleSpinBox()
         self.ram.setRange(0, 64)
-        self.ram.setSuffix(" GB זיכרון")
+        self.ram.setSpecialValueText("auto (learned)")
         self.vram = W.QDoubleSpinBox()
         self.vram.setRange(0, 16)
-        self.vram.setSuffix(" GB כרטיס מסך")
-        el.addWidget(self.ram)
-        el.addWidget(self.vram)
-        self.est.setVisible(False)
-        self.more.toggled.connect(self.est.setVisible)
-        lay.addWidget(self.est)
-        self.first = W.QCheckBox("להריץ אותה ראשונה")
-        lay.addWidget(self.first)
-        row = W.QHBoxLayout()
-        ok = W.QPushButton("➕  הוסף לתור")
-        ok.setObjectName("primary")
-        ok.clicked.connect(self.accept)
-        no = W.QPushButton("ביטול")
-        no.clicked.connect(self.reject)
-        row.addWidget(ok)
-        row.addWidget(no)
-        row.addStretch(1)
-        lay.addLayout(row)
+        self.vram.setSpecialValueText("auto (learned)")
+        form.addRow("Est RAM GB", self.ram)
+        form.addRow("Est VRAM GB", self.vram)
+        self.next = W.QCheckBox("Run next (top of the queue)")
+        form.addRow("", self.next)
+        lay.addLayout(form)
+        bb = W.QDialogButtonBox(W.QDialogButtonBox.Ok | W.QDialogButtonBox.Cancel)
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        lay.addWidget(bb)
 
-    def browse(self, ed, key):
-        if key in SAVE_FIELDS:
-            p, _ = W.QFileDialog.getSaveFileName(self, "איפה לשמור", ed.text())
-        else:
-            p, _ = W.QFileDialog.getOpenFileName(self, "בחר קובץ", ed.text())
-        if p:
-            ed.setText(p)
-
-    def request(self):
+    def request(self, tid):
         params = {}
         for k, e in self.edits.items():
             v = e.text().strip()
-            if v:
-                try:
-                    params[k] = json.loads(v) if v[:1] in "[{" or v.lstrip("-").replace(".", "", 1).isdigit() else v
-                except ValueError:
-                    params[k] = v
+            if v == "":
+                continue
+            try:
+                params[k] = json.loads(v) if v[:1] in "[{" or v.lstrip("-").replace(".", "", 1).isdigit() else v
+            except ValueError:
+                params[k] = v
         est = {}
-        if self.more.isChecked():
-            if self.ram.value() > 0:
-                est["ram_gb"] = self.ram.value()
-            if self.vram.value() > 0:
-                est["vram_gb"] = self.vram.value()
-        req = dict(op="submit", type=self.tid, params=params, name=self.name.text().strip() or None, requester="owner", est=est or None, next=self.first.isChecked())
-        if self.tid == "custom":
+        if self.ram.value() > 0:
+            est["ram_gb"] = self.ram.value()
+        if self.vram.value() > 0:
+            est["vram_gb"] = self.vram.value()
+        req = dict(op="submit", type=tid, params=params, name=self.name.text().strip() or None, requester=self.req.text().strip() or "owner", est=est or None, next=self.next.isChecked())
+        if tid == "custom":
             import shlex
             req["cmd"] = shlex.split(self.cmd.text(), posix=False)
         return req
 
 
-class OutputDialog(W.QDialog):
-    def __init__(self, parent, jid, title):
-        super().__init__(parent)
-        self.jid = jid
-        self.setWindowTitle("מה העבודה כתבה: " + title)
-        self.resize(900, 560)
-        lay = W.QVBoxLayout(self)
-        self.ed = W.QPlainTextEdit()
-        self.ed.setReadOnly(True)
-        self.ed.setLayoutDirection(Qt.LeftToRight)
-        lay.addWidget(self.ed)
-        self.t = QtCore.QTimer(self)
-        self.t.timeout.connect(self.refresh)
-        self.t.start(1500)
-        self.refresh()
-
-    def refresh(self):
-        try:
-            r = client.call({"op": "tail", "id": self.jid, "bytes": 40000}, timeout=3)
-            if r.get("ok") and r["text"] != self.ed.toPlainText():
-                bar = self.ed.verticalScrollBar()
-                end = bar.value() >= bar.maximum() - 4
-                self.ed.setPlainText(r["text"])
-                if end:
-                    bar.setValue(bar.maximum())
-        except Exception:
-            pass
-
-
 class Main(W.QMainWindow):
     def __init__(self, tray=True):
         super().__init__()
-        self.setWindowTitle("מנהל העבודות של ה-AI")
+        self.setWindowTitle("AI Broker")
         self.setWindowIcon(make_icon())
-        self.resize(1280, 880)
+        self.resize(1500, 900)
         self.state = None
         self.types = {}
         self.hist_rev = -1
+        self.sel_job = None
         self.quitting = False
-        self.building = False
-        self.last_status = None
-        self._build()
+        self.last_tray_status = None
+        self.building_limits = False
+        self._build_center()
+        self._build_docks()
+        self._build_toolbar()
+        self._build_menu()
+        self._build_status()
         self.tray = None
-        if tray and W.QSystemTrayIcon.isSystemTrayAvailable():
+        if tray and QtWidgets_tray_ok():
             self._build_tray()
-        self.settings = QtCore.QSettings("ai-broker", "gui2")
+        self.settings = QtCore.QSettings("ai-broker", "gui")
+        self._default_state = self.saveState()
         if self.settings.value("geometry"):
             self.restoreGeometry(self.settings.value("geometry"))
+            self.restoreState(self.settings.value("state"))
         self.poller = Poller()
         self.poller.got.connect(self.on_state)
         self.poller.down.connect(self.on_down)
         self.poller.start()
         self.load_types()
+        t = QtCore.QTimer(self)
+        t.timeout.connect(self.refresh_output)
+        t.start(1000)
 
-    # ------------------------------------------------------------ build
-    def _scroll(self, inner):
-        sa = W.QScrollArea()
-        sa.setWidgetResizable(True)
-        sa.setWidget(inner)
-        return sa
+    # ---------------------------------------------------------------- layout
+    def _build_center(self):
+        self.queue = QueueTable()
+        self.queue.reorder.connect(self.on_reorder)
+        self.queue.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.queue.customContextMenuRequested.connect(self.queue_menu)
+        self.queue.itemSelectionChanged.connect(self.on_select)
+        self.queue.doubleClicked.connect(lambda *_: self.show_output_tab())
+        box = W.QWidget()
+        lay = W.QVBoxLayout(box)
+        lay.setContentsMargins(0, 0, 0, 0)
+        head = W.QLabel("  Queue   running jobs first, then waiting jobs in order. Drag waiting rows to reorder; right-click for more.")
+        head.setStyleSheet("background:#3c3f41; padding:5px; color:#8c8c8c")
+        lay.addWidget(head)
+        lay.addWidget(self.queue)
+        self.setCentralWidget(box)
 
-    def _build(self):
-        root = W.QWidget()
-        root.setObjectName("page")
-        self.setCentralWidget(root)
-        v = W.QVBoxLayout(root)
-        v.setContentsMargins(24, 18, 24, 12)
-        v.setSpacing(14)
-        # banner
-        self.banner = W.QFrame()
-        self.banner.setObjectName("card")
-        bl = W.QHBoxLayout(self.banner)
-        bl.setContentsMargins(22, 16, 22, 16)
-        self.b_icon = W.QLabel("🟢")
-        self.b_icon.setStyleSheet("font-family:'%s'; font-size:40pt;" % EMOJI)
-        bc = W.QVBoxLayout()
-        self.b_title = W.QLabel("מתחבר…")
-        self.b_title.setObjectName("h1")
-        self.b_sub = W.QLabel("")
-        self.b_sub.setObjectName("muted")
-        self.b_sub.setWordWrap(True)
-        bc.addWidget(self.b_title)
-        bc.addWidget(self.b_sub)
-        bl.addWidget(self.b_icon)
-        bl.addLayout(bc, 1)
-        self.play = W.QPushButton("🎮   אני משחק / מקליט")
-        self.play.setObjectName("bigplay")
-        self.play.setCheckable(True)
-        self.play.setCursor(Qt.PointingHandCursor)
-        self.play.setToolTip("כשזה דלוק, עבודות שמשתמשות בכרטיס המסך מחכות, כדי שהמשחק או ההקלטה לא יגמגמו")
-        self.play.clicked.connect(lambda on: self.api({"op": "playing", "on": on}))
-        self.pause = W.QPushButton("⏸   עצור הכול")
-        self.pause.setObjectName("bigpause")
-        self.pause.setCheckable(True)
-        self.pause.setCursor(Qt.PointingHandCursor)
-        self.pause.setToolTip("שום עבודה חדשה לא תתחיל עד שתמשיך")
-        self.pause.clicked.connect(lambda on: self.api({"op": "pause"} if on else {"op": "resume"}))
-        bl.addWidget(self.play)
-        bl.addWidget(self.pause)
-        v.addWidget(self.banner)
-        # nav
-        nav = W.QHBoxLayout()
-        self.navs = []
-        self.stack = W.QStackedWidget()
-        for i, label in enumerate(("📋  מה קורה עכשיו", "➕  הוסף עבודה", "🕘  מה כבר נעשה", "⚙️  מתקדם")):
-            b = W.QPushButton(label)
-            b.setObjectName("nav")
-            b.setCheckable(True)
-            b.setCursor(Qt.PointingHandCursor)
-            b.clicked.connect(lambda _=False, k=i: self.go(k))
-            nav.addWidget(b)
-            self.navs.append(b)
-        nav.addStretch(1)
-        v.addLayout(nav)
-        v.addWidget(self.stack, 1)
-        self.stack.addWidget(self._now_page())
-        self.stack.addWidget(self._add_page())
-        self.stack.addWidget(self._hist_page())
-        self.stack.addWidget(self._adv_page())
-        self.go(0)
-        sb = self.statusBar()
-        self.sb = W.QLabel("")
-        sb.addWidget(self.sb, 1)
+    def dock(self, title, widget, area, name):
+        d = W.QDockWidget(title, self)
+        d.setObjectName(name)
+        d.setWidget(widget)
+        d.setFeatures(W.QDockWidget.DockWidgetMovable | W.QDockWidget.DockWidgetFloatable | W.QDockWidget.DockWidgetClosable)
+        self.addDockWidget(area, d)
+        return d
 
-    def go(self, k):
-        self.stack.setCurrentIndex(k)
-        sa = self.stack.currentWidget()
-        if isinstance(sa, W.QScrollArea):
-            sa.verticalScrollBar().setValue(0)
-        for i, b in enumerate(self.navs):
-            b.setChecked(i == k)
-
-    def _now_page(self):
-        inner = W.QWidget()
-        lay = W.QVBoxLayout(inner)
-        lay.setContentsMargins(0, 0, 8, 0)
-        lay.setSpacing(10)
-        h = W.QLabel("איך המחשב מרגיש")
-        h.setObjectName("h2")
-        lay.addWidget(h)
-        row = W.QHBoxLayout()
-        self.g_ram = Gauge("🧠", "זיכרון המחשב")
-        self.g_vram = Gauge("🎮", "כרטיס המסך")
-        self.g_disk = Gauge("💾", "הדיסק")
-        for g in (self.g_ram, self.g_vram, self.g_disk):
-            row.addWidget(g)
-        lay.addLayout(row)
-        h = W.QLabel("רץ עכשיו")
-        h.setObjectName("h2")
-        lay.addWidget(h)
-        self.run_list = CardList(lambda: JobCard("running", self.act, self.types))
-        lay.addWidget(self.run_list)
-        self.run_empty = W.QLabel("😴  שום דבר לא רץ כרגע")
-        self.run_empty.setObjectName("muted")
-        lay.addWidget(self.run_empty)
-        h = W.QLabel("ממתין בתור")
-        h.setObjectName("h2")
-        lay.addWidget(h)
-        hint = W.QLabel("אפשר לשנות את הסדר עם החצים בכל כרטיס. ⏫ = להריץ ראשונה.")
-        hint.setObjectName("muted")
-        lay.addWidget(hint)
-        self.q_list = CardList(lambda: JobCard("queued", self.act, self.types))
-        lay.addWidget(self.q_list)
-        self.q_empty = W.QLabel("🎉  התור ריק")
-        self.q_empty.setObjectName("muted")
-        lay.addWidget(self.q_empty)
-        lay.addStretch(1)
-        return self._scroll(inner)
-
-    def _add_page(self):
-        self.add_inner = W.QWidget()
-        self.add_lay = W.QVBoxLayout(self.add_inner)
-        self.add_lay.setContentsMargins(0, 0, 8, 0)
-        return self._scroll(self.add_inner)
-
-    def _hist_page(self):
-        inner = W.QWidget()
-        lay = W.QVBoxLayout(inner)
-        lay.setContentsMargins(0, 0, 8, 0)
-        self.hist_list = CardList(self._make_hist)
-        lay.addWidget(self.hist_list)
-        self.hist_empty = W.QLabel("עוד לא הסתיימה אף עבודה")
-        self.hist_empty.setObjectName("muted")
-        lay.addWidget(self.hist_empty)
-        lay.addStretch(1)
-        return self._scroll(inner)
-
-    def _make_hist(self):
-        f = W.QFrame()
-        f.setObjectName("card")
-        l = W.QHBoxLayout(f)
-        l.setContentsMargins(16, 12, 16, 12)
-        f.badge = W.QVBoxLayout()
-        l.addLayout(f.badge)
-        c = W.QVBoxLayout()
-        f.t1 = W.QLabel()
-        f.t1.setObjectName("big")
-        f.t2 = W.QLabel()
-        f.t2.setObjectName("muted")
-        c.addWidget(f.t1)
-        c.addWidget(f.t2)
-        l.addLayout(c, 1)
-        f.res = W.QLabel()
-        f.res.setStyleSheet("font-weight:700;")
-        l.addWidget(f.res)
-        f.btn = W.QPushButton("📄 מה נכתב")
-        l.addWidget(f.btn)
-        f.jid = None
-        f.made = False
-        return f
-
-    def _adv_page(self):
-        inner = W.QWidget()
-        lay = W.QVBoxLayout(inner)
-        lay.setContentsMargins(0, 0, 8, 0)
-        lay.setSpacing(10)
-        h = W.QLabel("כמה מותר ל-AI לקחת מהמחשב")
-        h.setObjectName("h2")
-        lay.addWidget(h)
-        note = W.QLabel("אלה מגבלות רכות: המערכת מכניסה כמה שיותר עבודות בתוכן. אפשר לשנות בזמן שהכול רץ.")
-        note.setObjectName("muted")
-        note.setWordWrap(True)
-        lay.addWidget(note)
+    def _build_docks(self):
+        # Job Library
+        self.lib = W.QTreeWidget()
+        self.lib.setHeaderLabels(["Job type", "RAM", "VRAM"])
+        self.lib.setColumnWidth(0, 230)
+        self.lib.setColumnWidth(1, 36)
+        self.lib.setColumnWidth(2, 44)
+        self.lib.setIndentation(14)
+        self.lib.itemDoubleClicked.connect(self.on_lib_double)
+        self.d_lib = self.dock("Job Library  (double-click to create a job)", self.lib, Qt.LeftDockWidgetArea, "lib")
+        # Resources
+        res = W.QWidget()
+        rl = W.QVBoxLayout(res)
+        self.g_ram = Gauge("Memory (RAM) in use")
+        self.g_commit = Gauge("Commit (RAM + pagefile)")
+        self.g_vram = Gauge("GPU memory (VRAM)")
+        self.g_cpu = Gauge("CPU", "%")
+        self.g_disk = Gauge("Disk busy", "%")
+        self.g_airam = Gauge("AI jobs: RAM budget")
+        self.g_aivram = Gauge("AI jobs: VRAM budget")
+        for g in (self.g_ram, self.g_commit, self.g_vram, self.g_cpu, self.g_disk, self.g_airam, self.g_aivram):
+            rl.addWidget(g)
+        gb = W.QGroupBox("Limits (soft; change while running)")
+        fl = W.QFormLayout(gb)
         self.sl = {}
-        for key, label, lo, hi in (("ram_gb", "זיכרון (RAM) לכל עבודות ה-AI יחד", 4, 62), ("vram_gb", "כרטיס מסך (VRAM) לכל עבודות ה-AI יחד", 2, 16),
-                                   ("max_jobs", "כמה עבודות במקביל לכל היותר", 1, 8), ("reserve_ram_gb", "כמה זיכרון חייב להישאר חופשי למחשב", 0, 24)):
-            card = W.QFrame()
-            card.setObjectName("card")
-            cl = W.QHBoxLayout(card)
-            cl.setContentsMargins(16, 12, 16, 12)
-            t = W.QLabel(label)
-            t.setObjectName("big")
+        for key, label, lo, hi, step in (("ram_gb", "AI RAM budget GB", 4, 62, 1), ("vram_gb", "AI VRAM budget GB", 2, 16, 1), ("max_jobs", "Max concurrent jobs", 1, 8, 1),
+                                         ("reserve_ram_gb", "Keep free RAM GB", 0, 24, 1)):
+            row = W.QWidget()
+            hl = W.QHBoxLayout(row)
+            hl.setContentsMargins(0, 0, 0, 0)
             s = W.QSlider(Qt.Horizontal)
             s.setRange(lo, hi)
-            val = W.QLabel("")
-            val.setMinimumWidth(80)
-            val.setStyleSheet("font-size:17pt; font-weight:800;")
-            s.valueChanged.connect(lambda v, l=val, k=key: l.setText(("%d GB" % v) if k != "max_jobs" else str(v)))
+            s.setSingleStep(step)
+            lab = W.QLabel("0")
+            lab.setMinimumWidth(26)
+            s.valueChanged.connect(lambda v, l=lab: l.setText(str(v)))
             s.sliderReleased.connect(lambda k=key, sl=s: self.set_limit(k, sl.value()))
-            cl.addWidget(t, 2)
-            cl.addWidget(s, 3)
-            cl.addWidget(val)
-            lay.addWidget(card)
-            self.sl[key] = (s, val)
-        h = W.QLabel("התנהגות")
-        h.setObjectName("h2")
-        lay.addWidget(h)
+            s.actionTriggered.connect(lambda act, k=key, sl=s: QtCore.QTimer.singleShot(0, lambda: self.set_limit(k, sl.value()) if not sl.isSliderDown() else None))
+            hl.addWidget(s)
+            hl.addWidget(lab)
+            fl.addRow(label, row)
+            self.sl[key] = (s, lab)
         self.flag_boxes = {}
-        for key, label in (("affinity", "לקבץ עבודות שמשתמשות באותו מודל (חוסך זמן טעינה)"), ("backfill", "לתת לעבודה קטנה לעקוף עבודה גדולה שמחכה לזיכרון"),
-                           ("emergency_suspend", "אם המחשב נכנס ללחץ: להקפיא את העבודה האחרונה שהתחילה"), ("suspend_on_pause", "כשלוחצים ״עצור הכול״ להקפיא גם את מה שרץ"),
-                           ("toast", "הודעה של Windows כשעבודה מסתיימת")):
+        for key, label in (("affinity", "Group jobs on the same model (affinity)"), ("backfill", "Let small jobs overtake a waiting big one"),
+                           ("emergency_suspend", "Safety brake suspends the youngest job"), ("suspend_on_pause", "Pause all also freezes running jobs"),
+                           ("toast", "Windows toast when a job ends")):
             c = W.QCheckBox(label)
             c.toggled.connect(lambda on, k=key: self.set_flag(k, on))
-            lay.addWidget(c)
+            fl.addRow(c)
             self.flag_boxes[key] = c
-        h = W.QLabel("יומן")
-        h.setObjectName("h2")
-        lay.addWidget(h)
+        rl.addWidget(gb)
+        rl.addStretch(1)
+        self.d_res = self.dock("Resources", res, Qt.RightDockWidgetArea, "res")
+        self.d_res.setMinimumWidth(330)
+        # Log / Output / History
         self.log = W.QPlainTextEdit()
         self.log.setReadOnly(True)
-        self.log.setLayoutDirection(Qt.LeftToRight)
-        self.log.setMaximumBlockCount(1500)
-        self.log.setMinimumHeight(220)
-        lay.addWidget(self.log)
-        row = W.QHBoxLayout()
-        b = W.QPushButton("📂 פתח את תיקיית הנתונים")
-        b.clicked.connect(lambda: os.startfile(str(paths.HOME)))
-        row.addWidget(b)
-        row.addStretch(1)
-        lay.addLayout(row)
-        return self._scroll(inner)
+        self.log.setMaximumBlockCount(2000)
+        self.out = W.QPlainTextEdit()
+        self.out.setReadOnly(True)
+        self.out.setMaximumBlockCount(4000)
+        ow = W.QWidget()
+        ol = W.QVBoxLayout(ow)
+        ol.setContentsMargins(0, 0, 0, 0)
+        self.out_title = W.QLabel("  Select a job in the queue or in History to see its output")
+        self.out_title.setStyleSheet("background:#3c3f41; padding:3px; color:#8c8c8c")
+        ol.addWidget(self.out_title)
+        ol.addWidget(self.out)
+        self.hist = W.QTableWidget(0, 10)
+        self.hist.setHorizontalHeaderLabels(["#", "Job", "Requester", "State", "Started", "Duration", "Peak RAM GB", "Peak commit GB", "Peak VRAM GB", "Exit"])
+        self.hist.verticalHeader().hide()
+        self.hist.verticalHeader().setDefaultSectionSize(30)
+        self.hist.setAlternatingRowColors(True)
+        self.hist.setSelectionBehavior(W.QAbstractItemView.SelectRows)
+        self.hist.setEditTriggers(W.QAbstractItemView.NoEditTriggers)
+        self.hist.setShowGrid(False)
+        self.hist.horizontalHeader().setStretchLastSection(True)
+        self.hist.setColumnWidth(1, 240)
+        self.hist.itemSelectionChanged.connect(self.on_hist_select)
+        self.hist_ids = []
+        self.d_log = self.dock("Log", self.log, Qt.BottomDockWidgetArea, "log")
+        self.d_out = self.dock("Output", ow, Qt.BottomDockWidgetArea, "out")
+        self.d_hist = self.dock("History", self.hist, Qt.BottomDockWidgetArea, "hist")
+        self.tabifyDockWidget(self.d_log, self.d_out)
+        self.tabifyDockWidget(self.d_out, self.d_hist)
+        self.d_log.raise_()
+        self.resizeDocks([self.d_lib, self.d_res], [330, 350], Qt.Horizontal)
+        self.resizeDocks([self.d_log], [250], Qt.Vertical)
+
+    def _build_toolbar(self):
+        tb = self.addToolBar("Main")
+        tb.setObjectName("toolbar")
+        tb.setMovable(False)
+        self.a_new = tb.addAction("＋ New job…")
+        self.a_new.triggered.connect(self.new_custom)
+        tb.addSeparator()
+        self.a_pause = tb.addAction("⏸ Pause all")
+        self.a_pause.triggered.connect(self.toggle_pause)
+        tb.addSeparator()
+        self.play_btn = W.QToolButton()
+        self.play_btn.setObjectName("play")
+        self.play_btn.setCheckable(True)
+        self.play_btn.setText("🎮  I am playing / recording")
+        self.play_btn.setToolTip("GPU jobs wait and running GPU jobs are suspended while this is on")
+        self.play_btn.clicked.connect(lambda on: self.api({"op": "playing", "on": on}))
+        tb.addWidget(self.play_btn)
+        tb.addSeparator()
+        self.a_cancel = tb.addAction("✕ Cancel selected")
+        self.a_cancel.triggered.connect(lambda: [self.api({"op": "cancel", "id": i}) for i in self.queue.selected_ids()])
+        self.a_next = tb.addAction("⏫ Run next")
+        self.a_next.triggered.connect(lambda: self.api({"op": "move", "ids": self.queued_sel(), "to": "top"}) if self.queued_sel() else None)
+        sp = W.QWidget()
+        sp.setSizePolicy(W.QSizePolicy.Expanding, W.QSizePolicy.Preferred)
+        tb.addWidget(sp)
+        self.state_lbl = W.QLabel("connecting…")
+        self.state_lbl.setStyleSheet("font-weight:bold; padding:0 10px")
+        tb.addWidget(self.state_lbl)
+
+    def _build_menu(self):
+        mb = self.menuBar()
+        m = mb.addMenu("&File")
+        m.addAction("New custom job…", self.new_custom, "Ctrl+N")
+        m.addSeparator()
+        m.addAction("Open data folder", lambda: os.startfile(str(paths.HOME)))
+        m.addAction("Open broker log file", lambda: os.startfile(str(paths.HOME / "broker.log")) if (paths.HOME / "broker.log").exists() else None)
+        m.addSeparator()
+        m.addAction("Quit window (the broker keeps running)", self.quit_gui, "Ctrl+Q")
+        m = mb.addMenu("&Queue")
+        m.addAction("Pause / resume all", self.toggle_pause, "Ctrl+P")
+        m.addAction("Toggle 'I am playing'", lambda: self.play_btn.click(), "Ctrl+G")
+        m.addSeparator()
+        m.addAction("Run next", lambda: self.api({"op": "move", "ids": self.queued_sel(), "to": "top"}) if self.queued_sel() else None)
+        m.addAction("Move up", lambda: self.api({"op": "move", "ids": self.queued_sel(), "to": "up"}) if self.queued_sel() else None, "Alt+Up")
+        m.addAction("Move down", lambda: self.api({"op": "move", "ids": self.queued_sel(), "to": "down"}) if self.queued_sel() else None, "Alt+Down")
+        m = mb.addMenu("&View")
+        for d in (self.d_lib, self.d_res, self.d_log, self.d_out, self.d_hist):
+            m.addAction(d.toggleViewAction())
+        m.addSeparator()
+        m.addAction("Reset layout", lambda: self.restoreState(self._default_state))
+        m = mb.addMenu("&Broker")
+        m.addAction("Start broker service", lambda: self.run_safe(client.start_daemon))
+        m.addAction("Stop broker service (running jobs keep running)", self.stop_broker)
+        m = mb.addMenu("&Help")
+        m.addAction("Switch to the SIMPLE view (big cards, Hebrew)", self.switch_view)
+        m.addAction("About", lambda: W.QMessageBox.about(self, "AI Broker", "AI Broker 1.0\nOne queue for all local AI/GPU jobs.\nPySide6 (Qt, LGPL-3) + psutil."))
+
+    def switch_view(self):
+        import subprocess
+        subprocess.Popen([str(paths.VENV_PYW), "-m", "aibroker.gui_simple"], cwd=str(paths.ROOT))
+        self.quitting = True
+        self.close()
+
+    def _build_status(self):
+        sb = self.statusBar()
+        self.sb = {k: W.QLabel("") for k in ("run", "queue", "ram", "commit", "vram", "state")}
+        for k in ("run", "queue", "ram", "commit", "vram"):
+            sb.addWidget(self.sb[k])
+        sb.addPermanentWidget(self.sb["state"])
 
     def _build_tray(self):
         self.tray = W.QSystemTrayIcon(make_icon(), self)
-        m = W.QMenu()
-        m.addAction("פתח את החלון", self.show_normal)
-        m.addAction("עצור / המשך הכול", lambda: self.pause.click())
-        m.addAction("אני משחק / מקליט", lambda: self.play.click())
-        m.addSeparator()
-        m.addAction("סגור את החלון (העבודות ממשיכות)", self.quit_gui)
-        self.tray.setContextMenu(m)
+        menu = W.QMenu()
+        menu.addAction("Show window", self.show_normal)
+        menu.addAction("Pause / resume all", self.toggle_pause)
+        menu.addAction("Toggle 'I am playing'", lambda: self.play_btn.click())
+        menu.addSeparator()
+        menu.addAction("Quit window", self.quit_gui)
+        self.tray.setContextMenu(menu)
         self.tray.activated.connect(lambda r: self.show_normal() if r in (W.QSystemTrayIcon.Trigger, W.QSystemTrayIcon.DoubleClick) else None)
+        self.tray.setToolTip("AI Broker")
         self.tray.show()
 
-    # ------------------------------------------------------------ actions
+    # ---------------------------------------------------------------- actions
     def api(self, req):
         try:
             r = client.call(req, timeout=5)
             if not r.get("ok"):
-                self.statusBar().showMessage("שגיאה: " + str(r.get("error")), 6000)
+                self.statusBar().showMessage("broker: " + str(r.get("error")), 6000)
             return r
         except Exception as e:
-            self.statusBar().showMessage("אין חיבור לשירות: %s" % e, 6000)
+            self.statusBar().showMessage("broker not reachable: %s" % e, 6000)
 
-    def act(self, req):
-        if req.pop("confirm", False):
-            if W.QMessageBox.question(self, "לבטל?", "לבטל את העבודה? אם היא רצה, היא תיעצר.") != W.QMessageBox.Yes:
-                return
-        self.api(req)
+    def run_safe(self, f):
+        try:
+            f()
+        except Exception as e:
+            self.statusBar().showMessage(str(e), 6000)
+
+    def stop_broker(self):
+        if W.QMessageBox.question(self, "Stop broker", "Stop the broker service? Running jobs keep running but the queue stops and exit codes get lost.") == W.QMessageBox.Yes:
+            self.api({"op": "shutdown"})
+
+    def toggle_pause(self):
+        self.api({"op": "resume"} if self.state and self.state.get("paused") else {"op": "pause"})
+
+    def queued_sel(self):
+        return [i for i in self.queue.selected_ids() if i in self.queue.queued_ids]
+
+    def on_reorder(self, ids, pos):
+        self.api({"op": "move", "ids": ids, "to": pos})
 
     def set_limit(self, key, v):
-        if not self.building:
+        if not self.building_limits:
             self.api({"op": "limits", "set": {key: v}})
 
     def set_flag(self, key, on):
-        if not self.building:
+        if not self.building_limits:
             self.api({"op": "limits", "flags": {key: on}})
+
+    def new_custom(self):
+        self.open_new("custom")
+
+    def on_lib_double(self, item, _col):
+        tid = item.data(0, Qt.UserRole)
+        if tid:
+            self.open_new(tid)
+
+    def open_new(self, tid):
+        t = self.types.get(tid)
+        if not t:
+            return
+        dlg = NewJobDialog(self, tid, t, "owner")
+        if dlg.exec() == W.QDialog.Accepted:
+            r = self.api(dlg.request(tid))
+            if r and r.get("ok"):
+                self.statusBar().showMessage("queued job #%d" % r["id"], 5000)
 
     def load_types(self):
         r = self.api({"op": "types"})
         if not r or not r.get("ok"):
             return
         self.types = r["types"]
-        while self.add_lay.count():
-            it = self.add_lay.takeAt(0)
-            if it.widget():
-                it.widget().deleteLater()
-        h = W.QLabel("מה תרצה לעשות?")
-        h.setObjectName("h1")
-        self.add_lay.addWidget(h)
-        sub = W.QLabel("לחץ על תמונה כדי להוסיף עבודה לתור. המערכת תתחיל אותה כשיהיה מקום.")
-        sub.setObjectName("muted")
-        self.add_lay.addWidget(sub)
+        self.lib.clear()
         groups = {}
-        order = ["Images", "3D", "Audio", "Game", "Other"]
-        for tid, t in sorted(self.types.items()):
-            groups.setdefault(t.get("group", "Other"), []).append((tid, t))
-        for g in sorted(groups, key=lambda x: order.index(x) if x in order else 99):
-            hh = W.QLabel(next((t.get("he_group") for _, t in groups[g] if t.get("he_group")), g))
-            hh.setObjectName("h2")
-            self.add_lay.addWidget(hh)
-            grid = W.QGridLayout()
-            grid.setSpacing(14)
-            for i, (tid, t) in enumerate(groups[g]):
-                tile = Tile(tid, t)
-                tile.clicked.connect(lambda k=tid: self.open_new(k))
-                grid.addWidget(tile, i // 3, i % 3)
-            for c in range(3):
-                grid.setColumnStretch(c, 1)
-            self.add_lay.addLayout(grid)
-        self.add_lay.addStretch(1)
+        for tid, t in sorted(self.types.items(), key=lambda kv: (kv[1].get("group", "Other"), kv[0])):
+            g = groups.get(t.get("group", "Other"))
+            if g is None:
+                g = W.QTreeWidgetItem([{"Images": "🖼️  Images", "3D": "🧊  3D models", "Audio": "🎵  Audio", "Game": "🎮  Game tests", "Other": "⚙️  Other"}.get(t.get("group", "Other"), t.get("group", "Other"))])
+                g.setFlags(Qt.ItemIsEnabled)
+                g.setForeground(0, QtGui.QBrush(QtGui.QColor('#e8c36a')))
+                f = g.font(0)
+                f.setBold(True)
+                g.setFont(0, f)
+                self.lib.addTopLevelItem(g)
+                groups[t.get("group", "Other")] = g
+            e = t.get("est", {})
+            it = W.QTreeWidgetItem([t.get("icon", "⚙️") + "  " + t.get("title", tid), "%.0f" % e.get("ram_gb", 0), "%.0f" % e.get("vram_gb", 0) if e.get("vram_gb") else "-"])
+            it.setData(0, Qt.UserRole, tid)
+            it.setToolTip(0, (t.get("notes") or t.get("title", tid)) + "\ntype id: " + tid + "\nclass: " + t.get("klass", "cpu"))
+            g.addChild(it)
+        self.lib.expandAll()
 
-    def open_new(self, tid):
-        t = self.types.get(tid)
-        if not t:
+    def queue_menu(self, pos):
+        ids = self.queue.selected_ids()
+        if not ids:
             return
-        dlg = JobDialog(self, tid, t)
-        if dlg.exec() == W.QDialog.Accepted:
-            r = self.api(dlg.request())
-            if r and r.get("ok"):
-                self.statusBar().showMessage("נוספה עבודה מספר %d" % r["id"], 5000)
-                self.go(0)
+        m = W.QMenu(self)
+        q = [i for i in ids if i in self.queue.queued_ids]
+        run = [i for i in ids if i not in self.queue.queued_ids]
+        jobs = {j["id"]: j for j in (self.state or {}).get("running", []) + (self.state or {}).get("queued", [])}
+        if q:
+            m.addAction("⏫ Run next", lambda: self.api({"op": "move", "ids": q, "to": "top"}))
+            m.addAction("▲ Move up", lambda: self.api({"op": "move", "ids": q, "to": "up"}))
+            m.addAction("▼ Move down", lambda: self.api({"op": "move", "ids": q, "to": "down"}))
+            m.addAction("⏬ Move to bottom", lambda: self.api({"op": "move", "ids": q, "to": "bottom"}))
+            m.addSeparator()
+        for i in ids:
+            j = jobs.get(i)
+            if not j:
+                continue
+            if j["state"] == "queued":
+                m.addAction(("▶ Release #%d" if j["held"] else "⏸ Hold #%d") % i, lambda i=i, h=j["held"]: self.api({"op": "job_resume" if h else "job_pause", "id": i}))
+            elif j["state"] in ("running", "paused"):
+                m.addAction(("▶ Resume #%d" if j.get("suspended") else "⏸ Suspend #%d") % i, lambda i=i, s=j.get("suspended"): self.api({"op": "job_resume" if s else "job_pause", "id": i}))
+        m.addSeparator()
+        m.addAction("✕ Cancel (%d)" % len(ids), lambda: [self.api({"op": "cancel", "id": i}) for i in ids])
+        m.addAction("Show output", self.show_output_tab)
+        m.exec(self.queue.viewport().mapToGlobal(pos))
 
-    def show_output(self, jid, title):
-        OutputDialog(self, jid, title).exec()
+    def show_output_tab(self):
+        self.d_out.show()
+        self.d_out.raise_()
 
-    # ------------------------------------------------------------ state
+    def on_select(self):
+        ids = self.queue.selected_ids()
+        if ids:
+            self.sel_job = ids[0]
+            self.refresh_output()
+
+    def on_hist_select(self):
+        rows = sorted({i.row() for i in self.hist.selectedIndexes()})
+        if rows and rows[0] < len(self.hist_ids):
+            self.sel_job = self.hist_ids[rows[0]]
+            self.refresh_output()
+
+    def refresh_output(self):
+        if self.sel_job is None or not self.d_out.isVisible():
+            return
+        r = None
+        try:
+            r = client.call({"op": "tail", "id": self.sel_job, "bytes": 30000}, timeout=3)
+        except Exception:
+            return
+        if r and r.get("ok"):
+            bar = self.out.verticalScrollBar()
+            at_end = bar.value() >= bar.maximum() - 4
+            txt = r["text"]
+            if txt != getattr(self, "_out_txt", None):
+                self._out_txt = txt
+                self.out.setPlainText(txt)
+                if at_end:
+                    bar.setValue(bar.maximum())
+            self.out_title.setText("  Output of job #%d (last 30 KB)" % self.sel_job)
+
+    # ---------------------------------------------------------------- state
     def on_down(self, msg):
-        self.set_banner("🔌", "#6b7280", "השירות לא רץ", "הפעל מחדש מהתפריט ״מתקדם״ או מהקובץ AI_Broker.bat")
-
-    def set_banner(self, emoji, color, title, sub):
-        self.b_icon.setText(emoji)
-        self.b_title.setText(title)
-        self.b_title.setStyleSheet("color:%s;" % color)
-        self.b_sub.setText(sub)
+        self.state_lbl.setText("● broker not running")
+        self.state_lbl.setStyleSheet("font-weight:bold; padding:0 10px; color:#e06c75")
+        self.sb["state"].setText("broker offline")
 
     def on_state(self, s):
         first = self.state is None
         self.state = s
-        sy, lim = s["sys"], s["limits"]
-        used = sy["ram_total"] - sy["ram_avail"]
-        self.g_ram.set(used, sy["ram_total"], "%.0f מתוך %.0f GB בשימוש" % (used, sy["ram_total"]))
-        self.g_vram.set(sy["gpu_used"], sy["gpu_total"], "%.1f מתוך %.0f GB בשימוש" % (sy["gpu_used"], sy["gpu_total"]))
-        self.g_disk.set(sy["disk"], 100, "%.0f%% עסוק" % sy["disk"])
-        nrun, nq = len(s["running"]), len(s["queued"])
-        counts = "רצות %d עבודות, ממתינות %d." % (nrun, nq) if (nrun or nq) else "אין עבודות כרגע."
-        st = s["status"]
-        if st == "BRAKE":
-            self.set_banner("🛑", "#dc2626", "המחשב בלחץ, עצרתי הכול", "אין מספיק זיכרון פנוי. הקפאתי עבודה אחת והעבודות החדשות לא יתחילו עד שיירגע. " + counts)
-        elif st == "PLAYING":
-            self.set_banner("🎮", "#dc2626", "אתה משחק / מקליט", "עבודות של כרטיס המסך מחכות, כדי שלא יהיו גמגומים. עבודות קלות ממשיכות. " + counts)
-        elif st == "PAUSED":
-            self.set_banner("⏸", "#d97706", "הכול מושהה", "שום עבודה חדשה לא מתחילה עד שתלחץ ״המשך״. " + counts)
-        else:
-            f = used / sy["ram_total"]
-            if f < 0.7:
-                self.set_banner("🟢", "#16a34a", "הכול רגוע", "המחשב מרגיש טוב. " + counts)
-            elif f < 0.88:
-                self.set_banner("🟠", "#d97706", "המחשב עמוס, אבל בשליטה", "אני מוודא שלא יתווספו עבודות מעבר למה שהוא מחזיק. " + counts)
-            else:
-                self.set_banner("🔴", "#dc2626", "המחשב כמעט מלא", "עבודות חדשות לא יתחילו עד שיתפנה מקום. " + counts)
-        self.play.setChecked(s["playing"])
-        self.pause.setChecked(s["paused"])
-        self.pause.setText("▶   המשך" if s["paused"] else "⏸   עצור הכול")
-        self.building = True
-        for k, (sl, val) in self.sl.items():
+        sy = s["sys"]
+        lim = s["limits"]
+        self.g_ram.set(sy["ram_total"] - sy["ram_avail"], sy["ram_total"], marker=None, text="%.1f / %.0f GB (free %.1f)" % (sy["ram_total"] - sy["ram_avail"], sy["ram_total"], sy["ram_avail"]))
+        self.g_commit.set(sy["commit_limit"] - sy["commit_avail"], sy["commit_limit"], text="%.0f / %.0f GB (free %.0f)" % (sy["commit_limit"] - sy["commit_avail"], sy["commit_limit"], sy["commit_avail"]))
+        self.g_vram.set(sy["gpu_used"], sy["gpu_total"], marker=lim["vram_gb"], text="%.1f / %.1f GB" % (sy["gpu_used"], sy["gpu_total"]))
+        self.g_cpu.set(sy["cpu"], 100, text="%.0f %%" % sy["cpu"])
+        self.g_disk.set(sy["disk"], 100, text="%.0f %%" % sy["disk"])
+        self.g_airam.set(s["budget"]["ram"], lim["ram_gb"], text="%.1f / %.0f GB (limit)" % (s["budget"]["ram"], lim["ram_gb"]))
+        self.g_aivram.set(s["budget"]["vram"], lim["vram_gb"], text="%.1f / %.0f GB (limit)" % (s["budget"]["vram"], lim["vram_gb"]))
+        self.building_limits = True
+        for k, (sl, lab) in self.sl.items():
             if not sl.isSliderDown():
                 sl.setValue(int(round(lim[k])))
-                val.setText(("%d GB" % lim[k]) if k != "max_jobs" else str(int(lim[k])))
+                lab.setText(str(int(round(lim[k]))))
         for k, c in self.flag_boxes.items():
             c.setChecked(bool(s["flags"].get(k)))
-        self.building = False
-        self.run_list.sync(s["running"], lambda w, j, i: w.update_job(j))
-        self.q_list.sync(s["queued"], lambda w, j, i: w.update_job(j, i))
-        self.run_empty.setVisible(not nrun)
-        self.q_empty.setVisible(not nq)
-        self.sb.setText("זיכרון פנוי: %.0f GB     כרטיס מסך: %.1f/%.0f GB     %s" % (sy["ram_avail"], sy["gpu_used"], sy["gpu_total"],
-                                                                                    ("נעילת כרטיס מסך: " + s["lock"]) if s["lock"] != "none" else ""))
-        if self.tray and st != self.last_status:
-            self.tray.setIcon(make_icon({"ACTIVE": "#16a34a", "PAUSED": "#d97706", "PLAYING": "#dc2626", "BRAKE": "#dc2626"}[st]))
-            self.last_status = st
+        self.play_btn.setChecked(s["playing"])
+        self.building_limits = False
+        self.a_pause.setText("▶ Resume" if s["paused"] else "⏸ Pause all")
+        status = s["status"]
+        col = {"ACTIVE": "#6a9955", "PAUSED": "#d7ba7d", "PLAYING": "#e06c75", "BRAKE": "#e06c75"}[status]
+        self.state_lbl.setText("● " + status)
+        self.state_lbl.setStyleSheet("font-weight:bold; padding:0 10px; color:" + col)
+        self.sb["state"].setText(status + (" - " + s["brake"] if s["brake"] else "") + ("   GPU lock: " + s["lock"] if s["lock"] != "none" else ""))
+        self.sb["run"].setText("Running %d" % len(s["running"]))
+        self.sb["queue"].setText("Queued %d" % len(s["queued"]))
+        self.sb["ram"].setText("Free RAM %.1f GB" % sy["ram_avail"])
+        self.sb["commit"].setText("Commit free %.0f GB" % sy["commit_avail"])
+        self.sb["vram"].setText("VRAM %.1f/%.1f GB" % (sy["gpu_used"], sy["gpu_total"]))
+        if self.tray and status != self.last_tray_status:
+            self.tray.setIcon(make_icon({"ACTIVE": "#3d7a3d", "PAUSED": "#b08d2f", "PLAYING": "#a8321f", "BRAKE": "#a8321f"}[status]))
+            self.tray.setToolTip("AI Broker: %s, %d running, %d queued" % (status, len(s["running"]), len(s["queued"])))
+            self.last_tray_status = status
         for n, ts, text in s.get("events", []):
             self.log.appendPlainText("%s  %s" % (time.strftime("%H:%M:%S", time.localtime(ts)), text))
             if self.tray and not first and " -> " in text and text.startswith("#"):
                 self.tray.showMessage("AI Broker", text[:150], W.QSystemTrayIcon.Information, 6000)
+        self.fill_queue(s)
         if s["hist_rev"] != self.hist_rev:
             self.hist_rev = s["hist_rev"]
             self.fill_history()
+        if first:
+            self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().maximum())
+
+    def fill_queue(self, s):
+        if QtWidgets_mouse_down():
+            return
+        q = self.queue
+        sel = set(q.selected_ids())
+        vs = q.verticalScrollBar().value()
+        jobs = s["running"] + s["queued"]
+        q.setUpdatesEnabled(False)
+        q.setRowCount(len(jobs))
+        q.job_ids = [j["id"] for j in jobs]
+        q.queued_ids = [j["id"] for j in s["queued"]]
+        for r, j in enumerate(jobs):
+            st = "held" if j["state"] == "queued" and j.get("held") else ("suspended" if j.get("suspended") else j["state"])
+            live = ""
+            if j["state"] in ("running", "paused"):
+                live = "RAM %.1f GB  VRAM %.1f GB" % (j.get("cur_ws", 0), j.get("cur_vram", 0))
+            else:
+                live = j.get("reason") or ("starts next tick" if not j.get("held") else "held by owner")
+            tm = fmt_dur(j.get("elapsed", 0)) if j["state"] in ("running", "paused") else fmt_dur(time.time() - j["submitted"])
+            ic = (self.types.get(j["type"], {}).get("icon", "⚙️") + "  ")
+            vals = [str(j["id"]), ic + j["name"], j["requester"], self.types.get(j["type"], {}).get("title", j["model"]).split("(")[0].strip(), "%.1f" % j["est_ram"], "%.1f" % j["est_vram"] if j["est_vram"] else "-", st, tm, live]
+            for c, v in enumerate(vals):
+                it = q.item(r, c) or W.QTableWidgetItem()
+                it.setText(v)
+                if c == 6:
+                    it.setForeground(QtGui.QColor(STATE_COLOR.get(j["state"], "#bbbbbb") if st != "suspended" and st != "held" else "#d7ba7d"))
+                elif c == 8:
+                    it.setForeground(QtGui.QColor("#e0a070" if j["state"] == "queued" and j.get("reason") else "#a9b7c6"))
+                elif c in (4, 5):
+                    it.setToolTip(j["est_source"])
+                    it.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
+                if j["state"] == "queued":
+                    flags |= Qt.ItemIsDragEnabled
+                it.setFlags(flags)
+                if c == 1 and j["manual"]:
+                    it.setToolTip("moved by the owner: affinity will not jump over it")
+                q.setItem(r, c, it)
+            if j["id"] in sel:
+                q.selectRow(r)
+        q.verticalScrollBar().setValue(vs)
+        q.setUpdatesEnabled(True)
 
     def fill_history(self):
-        r = self.api({"op": "history", "limit": 60})
+        r = self.api({"op": "history", "limit": 200})
         if not r or not r.get("ok"):
             return
+        h = self.hist
         jobs = r["jobs"]
-        self.hist_empty.setVisible(not jobs)
-
-        def upd(w, j, i):
-            t = self.types.get(j["type"], {})
-            if not w.made:
-                w.badge.addWidget(icon_badge(t.get("icon", "⚙️"), t.get("color", "#78909c"), 56))
-                w.made = True
-            w.jid = j["id"]
-            w.t1.setText(t.get("he_title") or j["name"])
+        h.setRowCount(len(jobs))
+        self.hist_ids = [j["id"] for j in jobs]
+        for i, j in enumerate(jobs):
             dur = (j.get("finished") or 0) - (j.get("started") or j.get("finished") or 0)
-            w.t2.setText("%s  •  ביקש: %s  •  %s  •  זיכרון שיא %.1f GB" % (j["name"], j["requester"], fmt_dur(dur), j.get("peak_ws") or 0))
-            ok = {"done": ("✅ הצליחה", "#16a34a"), "failed": ("❌ נכשלה", "#dc2626"), "cancelled": ("🚫 בוטלה", "#6b7280"), "lost": ("❓ לא ידוע", "#d97706")}[j["state"]]
-            w.res.setText(ok[0])
-            w.res.setStyleSheet("font-weight:700; color:%s;" % ok[1])
-            if getattr(w, "wired", False):
-                w.btn.clicked.disconnect()
-            w.wired = True
-            w.btn.clicked.connect(lambda _=False, jid=j["id"], nm=j["name"]: self.show_output(jid, nm))
-        self.hist_list.sync(jobs, upd)
+            vals = [str(j["id"]), j["name"], j["requester"], j["state"], time.strftime("%m-%d %H:%M:%S", time.localtime(j["started"])) if j.get("started") else "-", fmt_dur(dur),
+                    "%.1f" % (j.get("peak_ws") or 0), "%.1f" % (j.get("peak_commit") or 0), "%.1f" % (j.get("peak_vram") or 0), str(j.get("rc"))]
+            for c, v in enumerate(vals):
+                it = W.QTableWidgetItem(v)
+                if c == 3:
+                    it.setForeground(QtGui.QColor(STATE_COLOR.get(j["state"], "#bbbbbb")))
+                if c >= 6 and c <= 8:
+                    it.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                h.setItem(i, c, it)
 
-    # ------------------------------------------------------------ window
+    # ---------------------------------------------------------------- window
     def show_normal(self):
         self.showNormal()
         self.raise_()
@@ -905,45 +762,58 @@ class Main(W.QMainWindow):
 
     def closeEvent(self, e):
         self.settings.setValue("geometry", self.saveGeometry())
+        self.settings.setValue("state", self.saveState())
         if self.tray and not self.quitting:
             e.ignore()
             self.hide()
-            if not self.settings.value("tray_hint"):
-                self.tray.showMessage("AI Broker", "החלון הוסתר לאזור ההודעות. העבודות ממשיכות לרוץ.", W.QSystemTrayIcon.Information, 6000)
-                self.settings.setValue("tray_hint", True)
+            if not self.settings.value("tray_hint_shown"):
+                self.tray.showMessage("AI Broker", "The window is hidden in the tray. The broker keeps running. Use the tray icon to bring it back or to quit the window.", W.QSystemTrayIcon.Information, 6000)
+                self.settings.setValue("tray_hint_shown", True)
             return
         self.poller.alive = False
         self.poller.wait(2000)
         W.QApplication.quit()
 
 
+def QtWidgets_tray_ok():
+    return W.QSystemTrayIcon.isSystemTrayAvailable()
+
+
+def QtWidgets_mouse_down():
+    return bool(W.QApplication.mouseButtons() & Qt.LeftButton)
+
+
 def main(argv=None):
     argv = list(sys.argv[1:] if argv is None else argv)
-    arg = lambda k, d=None: argv[argv.index(k) + 1] if k in argv else d
-    shot, page, size = arg("--screenshot"), int(arg("--page", 0)), arg("--size")
+    shot = None
+    size = None
+    if "--screenshot" in argv:
+        shot = argv[argv.index("--screenshot") + 1]
+    if "--size" in argv:
+        size = [int(x) for x in argv[argv.index("--size") + 1].lower().split("x")]
     app = W.QApplication(sys.argv[:1])
     app.setStyle("Fusion")
-    app.setLayoutDirection(Qt.RightToLeft)
-    f = app.font()
-    f.setPointSize(12)
-    app.setFont(f)
     app.setStyleSheet(QSS)
+    app.setApplicationName("AI Broker")
     try:
         client.start_daemon()
     except Exception as e:
         print("could not start the broker:", e)
     win = Main(tray=("--no-tray" not in argv and shot is None))
     if size:
-        win.resize(*[int(x) for x in size.lower().split("x")])
-    win.go(page)
-    win.show()
+        win.resize(*size)
     if shot:
+        win.restoreState(win._default_state)
+        win.show()
+
         def grab():
             win.grab().save(shot)
             print("saved", shot)
             win.quitting = True
             win.close()
         QtCore.QTimer.singleShot(3500, grab)
+    else:
+        win.show()
     sys.exit(app.exec())
 
 
