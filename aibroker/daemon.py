@@ -180,6 +180,28 @@ class Broker:
                 raise ValueError("job #%d is already %s" % (jid, j["state"]))
             self.log("cancel #%d" % jid)
 
+    def rerun(self, jid, requester=None):
+        """Queue the same job again (same type, parameters, estimate override, name) with a NEW output folder."""
+        with self.lock:
+            j = self.store.get(jid)
+            if not j:
+                raise ValueError("no job #%d" % jid)
+            old = (j.get("outdir") or "").replace("\\", "/")
+
+            def fix(v):
+                if isinstance(v, str):
+                    return v.replace(old, "{outdir}") if old else v
+                if isinstance(v, list):
+                    return [fix(x) for x in v]
+                return v
+            params = {k: fix(v) for k, v in (j["params"] or {}).items()}
+            req = dict(type=j["type"], params=params, name=(j["name"] + " (שוב)") if "(שוב)" not in j["name"] else j["name"], requester=requester or "owner", model=j["model"])
+            if j["type"] == "custom":
+                req["cmd"] = params.pop("extra", None) or [fix(x) for x in j["cmd"]]
+            if str(j["est_source"]).startswith("given"):
+                req["est"] = {"ram_gb": j["est_ram"], "vram_gb": j["est_vram"], "commit_gb": j["est_commit"]}
+            return self.submit(req)
+
     def job_pause(self, jid):
         with self.lock:
             j = self.store.get(jid)
@@ -485,6 +507,8 @@ class Broker:
         if op == "move":
             self.move([int(i) for i in req["ids"]], req["to"])
             return dict(ok=True)
+        if op == "rerun":
+            return dict(ok=True, id=self.rerun(int(req["id"]), req.get("requester")))
         if op == "cancel":
             self.cancel(int(req["id"]))
             return dict(ok=True)

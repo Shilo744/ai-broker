@@ -154,6 +154,14 @@ def move_job(job_id: int, to: Annotated[str, Field(description="'top' (run next)
 
 
 @mcp.tool()
+def rerun_job(job_id: Annotated[int, Field(description="A finished (or any earlier) job id to repeat.")],
+              requester: Annotated[str | None, Field(description="Your agent name, shown in the queue.")] = None) -> dict:
+    """Queue the SAME job again (same type, parameters and name) with a fresh output folder. Use it to repeat a past job instead of rebuilding its parameters."""
+    r = _call({"op": "rerun", "id": job_id, "requester": requester or REQUESTER}, start=True)
+    return r if not r.get("ok") else {"ok": True, "job_id": r["id"], "next_step": "wait_for_job(job_id)"}
+
+
+@mcp.tool()
 def cancel_job(job_id: int) -> dict:
     """Cancel a waiting job, or kill a running one (its process tree is terminated). Only cancel your own jobs."""
     return _call({"op": "cancel", "id": job_id})

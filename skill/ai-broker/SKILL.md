@@ -9,7 +9,7 @@ The owner's laptop (64 GB RAM, 16 GB GPU, shared by several agents, the game and
 
 ## When to use it
 Submit to the broker when the work is any of: ComfyUI / Qwen-Image-Edit / Z-Image, TripoSG or Step1X-3D shapes, Blender on large meshes (bake, clean, decimate millions of faces), ACE-Step music, MOSS sound, Godot `shots`/`film` runs, or any script that loads a model on the GPU or needs more than about 3 GB RAM.
-Do NOT use it for: git, file edits, short Python/PowerShell, small Blender operations on tiny files.
+The owner also submits jobs by hand in the window ("New job" / drag a file); those jobs show up in the same queue with requester `owner`. Do NOT use it for: git, file edits, short Python/PowerShell, small Blender operations on tiny files.
 **Never start those heavy jobs directly in a shell** (no `python run_job.py`, no direct ComfyUI, no `blender -b` on big meshes) and never kill another session's process.
 
 ## The tools (MCP server `ai-broker`)
@@ -20,6 +20,7 @@ Do NOT use it for: git, file edits, short Python/PowerShell, small Blender opera
 | `queue_status` / `resources` | What runs, what waits and why, free RAM, GPU memory |
 | `job_status` / `job_output` / `job_history` | State, exit code, measured peaks, log tail |
 | `wait_for_job` | Block up to `timeout_s` (max 1500). Call again if `finished` is false |
+| `rerun_job` | Repeat a past job (same parameters, new output folder) |
 | `move_job`, `hold_job`, `release_job`, `cancel_job` | Queue control (your own jobs only) |
 | `pause_queue`, `resume_queue`, `set_playing_mode`, `get_limits`, `set_limits` | **Owner's controls: use only when the owner asked** |
 
@@ -28,7 +29,7 @@ CLI equivalent (when MCP is not available): `aijob submit <type> key=value ...`,
 ## How to submit well
 1. Pick a type from `list_job_types`. If none fits, use `custom` with `command=[...]` and give **est_ram_gb / est_vram_gb yourself** (measure or take it from `job_history`; say a bit more, not less).
 2. For the known types do **not** pass estimates: the broker uses the last measured runs (shown as "learned from N runs" in the queue). Pass them only if you know this input is unusually big (for example a 4-million-face mesh in Blender: about 15 GB).
-3. Give a short human `name` and your agent name as `requester`. Use absolute paths.
+3. **Do not pass an output path.** Every job gets its own folder `output/<model type>/<date>_<name>/` (created by the broker; also available to the job as env `AIBROKER_OUTDIR` and as `{outdir}` in parameters). `job_status` returns `outdir` and `output_files`. The owner browses these folders in the window. Give a short human `name` (ASCII letters in the name become the folder name) and your agent name as `requester`. Use absolute paths.
 4. Many items of the same kind? Prefer ONE batch job (the Qwen runner takes `batch=jobs.json`; the lab's shape scripts take a jobs.json) so the model loads once, rather than 20 separate jobs. Otherwise submit them all: jobs of the same model are grouped automatically.
 5. Chains: `after_job_id=<id>` starts a job only after the first one succeeded (it is cancelled if that one fails).
 6. Do not use `run_next` unless the owner told you something is urgent. The owner may move jobs by hand; do not fight that.

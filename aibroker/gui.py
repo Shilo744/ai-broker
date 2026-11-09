@@ -259,17 +259,35 @@ HE_FIELD = {"image": "תמונה", "image2": "תמונה שנייה", "instructi
 FILE_FIELDS = {"image", "image2", "ref", "jobs", "script", "raw", "clean", "batch"}
 
 
+class DropEdit(W.QLineEdit):
+    """A path field that also accepts a file dropped from Explorer."""
+    def __init__(self, text=""):
+        super().__init__(text)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, e):
+        if e.mimeData().hasUrls():
+            e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        for u in e.mimeData().urls():
+            if u.isLocalFile():
+                self.setText(u.toLocalFile().replace("\\", "/"))
+                break
+
+
 class SubmitDialog(W.QDialog):
     """Secondary and minimal: model type, input file, name. Everything else is defaulted from the job-type file and hidden under 'Advanced'."""
-    def __init__(self, parent, types, preselect=None):
+    def __init__(self, parent, types, preselect=None, prefill=None):
         super().__init__(parent)
         self.types = types
-        self.setWindowTitle("שליחת עבודה")
+        self.prefill = prefill
+        self.setWindowTitle("עבודה חדשה")
         self.setMinimumWidth(560)
         self.setLayoutDirection(Qt.RightToLeft)
         self.lay = W.QVBoxLayout(self)
         self.lay.setSpacing(10)
-        note = W.QLabel("בדרך כלל Claude שולח עבודות בעצמו. כאן אפשר לשלוח עבודה ידנית. התוצאה תישמר אוטומטית בתיקיית המודל.")
+        note = W.QLabel("בחר סוג, בחר קובץ (או גרור אותו לשדה), ולחץ הוסף. העבודה נכנסת לאותו תור ש-Claude משתמש בו, והתוצאה נשמרת לבד בתיקיית המודל.")
         note.setObjectName("muted")
         note.setWordWrap(True)
         self.lay.addWidget(note)
@@ -315,6 +333,7 @@ class SubmitDialog(W.QDialog):
         row.addStretch(1)
         self.lay.addLayout(row)
         self.edits = {}
+        self.prefilled = False
         self.combo.currentIndexChanged.connect(self.rebuild)
         self.rebuild()
 
@@ -327,14 +346,20 @@ class SubmitDialog(W.QDialog):
         self._clear(self.main_form)
         self._clear(self.adv_form)
         self.edits = {}
+        self.prefilled = False
         tid = self.combo.currentData()
         t = self.types[tid]
         self.where.setText("התוצאה תישמר ב: output\\%s\\<תאריך>_<שם>\\" % (t.get("output_dir") or tid))
         for k, spec in (t.get("params") or {}).items():
             d = spec.get("default") if isinstance(spec, dict) else spec
             req = isinstance(spec, dict) and spec.get("required")
-            e = W.QLineEdit("" if d is None else (json.dumps(d) if isinstance(d, (list, dict)) else str(d)))
+            e = DropEdit("" if d is None else (json.dumps(d) if isinstance(d, (list, dict)) else str(d)))
             e.setLayoutDirection(Qt.LeftToRight)
+            if k in FILE_FIELDS and self.prefill and not self.prefilled:
+                e.setText(self.prefill)
+                self.prefilled = True
+            if k in FILE_FIELDS:
+                e.setPlaceholderText("גרור לכאן קובץ או לחץ ״בחר״")
             row = W.QHBoxLayout()
             row.addWidget(e, 1)
             if k in FILE_FIELDS:
@@ -443,6 +468,7 @@ class Main(W.QMainWindow):
         self.log_text = ""
         self.thumb_cache = {}
         self.hist_jobs = []
+        self.setAcceptDrops(True)
         self._build()
         self.tray = None
         if tray and W.QSystemTrayIcon.isSystemTrayAvailable():
@@ -496,11 +522,13 @@ class Main(W.QMainWindow):
         self.pause.setCheckable(True)
         self.pause.setToolTip("שום עבודה חדשה לא מתחילה עד שתמשיך")
         self.pause.clicked.connect(lambda on: self.api({"op": "pause"} if on else {"op": "resume"}))
-        sub = W.QPushButton("שליחת עבודה…")
+        sub = W.QPushButton("עבודה חדשה")
+        sub.setObjectName("primary")
+        sub.setToolTip("שלח עבודה בעצמך: בחר סוג וקובץ")
         sub.clicked.connect(lambda: self.open_submit())
         adv = W.QPushButton("מתקדם")
         adv.clicked.connect(self.open_advanced)
-        for b in (self.play, self.pause, sub, adv):
+        for b in (sub, self.play, self.pause, adv):
             head.addWidget(b)
         v.addLayout(head)
         split = W.QSplitter(Qt.Horizontal)
@@ -517,6 +545,9 @@ class Main(W.QMainWindow):
         self.model_list.setIconSize(QtCore.QSize(26, 26))
         self.model_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.model_list.currentRowChanged.connect(self.on_model)
+        self.model_list.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.model_list.customContextMenuRequested.connect(self.model_menu)
+        self.model_list.itemDoubleClicked.connect(lambda it: self.open_folder(it.data(Qt.UserRole)))
         ml.addWidget(self.model_list, 1)
         mp.setMinimumWidth(200)
         mp.setMaximumWidth(250)
@@ -567,7 +598,27 @@ class Main(W.QMainWindow):
         for i, wd in enumerate((38, 120, 210, 90, 80, 62)):
             self.hist.setColumnWidth(i, wd)
         self.hist.itemDoubleClicked.connect(self.hist_open)
-        self.tabs.addTab(self.hist, "היסטוריה")
+        hw = W.QWidget()
+        hl = W.QVBoxLayout(hw)
+        hl.setContentsMargins(0, 6, 0, 0)
+        hb = W.QHBoxLayout()
+        rb = W.QPushButton("הרץ שוב עם אותן הגדרות")
+        rb.setObjectName("tool")
+        rb.clicked.connect(self.hist_rerun)
+        ob = W.QPushButton("פתח את תיקיית התוצאה")
+        ob.setObjectName("tool")
+        ob.clicked.connect(lambda: self.hist_open(self.hist.currentItem()) if self.hist.currentItem() else None)
+        hb.addWidget(rb)
+        hb.addWidget(ob)
+        hb.addStretch(1)
+        hint = W.QLabel("לחיצה כפולה על שורה פותחת את התיקייה")
+        hint.setObjectName("muted")
+        hb.addWidget(hint)
+        hl.addLayout(hb)
+        self.hist.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.hist.customContextMenuRequested.connect(self.hist_menu)
+        hl.addWidget(self.hist, 1)
+        self.tabs.addTab(hw, "היסטוריה")
         tl.addWidget(self.tabs)
         cs.addWidget(top)
         outp = self._panel()
@@ -582,8 +633,12 @@ class Main(W.QMainWindow):
         self.open_btn = W.QPushButton("פתח תיקייה")
         self.open_btn.setObjectName("tool")
         self.open_btn.clicked.connect(self.open_model_folder)
+        self.new_btn = W.QPushButton("עבודה חדשה במודל הזה")
+        self.new_btn.setObjectName("tool")
+        self.new_btn.clicked.connect(lambda: self.open_submit(self.model_first_type()))
         oh.addWidget(self.out_title)
         oh.addWidget(self.out_path, 1)
+        oh.addWidget(self.new_btn)
         oh.addWidget(self.open_btn)
         ol.addLayout(oh)
         self.files = W.QListWidget()
@@ -697,10 +752,52 @@ class Main(W.QMainWindow):
             m.addAction(text, lambda k=key: self.queue_action(k))
         m.exec(self.queue.viewport().mapToGlobal(pos))
 
-    def open_submit(self, preselect=None):
+    def model_first_type(self, od=None):
+        od = od if od is not None else self.sel_model
+        g = next((m for m in self.models if m["dir"] == od), None)
+        return g["tids"][0] if g else None
+
+    def model_menu(self, pos):
+        it = self.model_list.itemAt(pos)
+        if not it:
+            return
+        od = it.data(Qt.UserRole)
+        m = W.QMenu(self)
+        m.addAction("פתח את תיקיית הפלט", lambda: self.open_folder(od))
+        if od:
+            m.addAction("עבודה חדשה במודל הזה", lambda: self.open_submit(self.model_first_type(od)))
+        m.exec(self.model_list.viewport().mapToGlobal(pos))
+
+    def open_folder(self, od):
+        d = Path(self.output_root) / od if od else Path(self.output_root)
+        d.mkdir(parents=True, exist_ok=True)
+        os.startfile(str(d))
+
+    def dragEnterEvent(self, e):
+        if e.mimeData().hasUrls():
+            e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        """Drop a file anywhere on the window: opens the new-job dialog with that file filled in."""
+        for u in e.mimeData().urls():
+            if u.isLocalFile():
+                path = u.toLocalFile().replace("\\", "/")
+                pre = self.model_first_type()
+                if not pre:
+                    pre = "qwen_image_edit" if Path(path).suffix.lower() in IMG else None
+                self.open_submit(pre, path)
+                break
+
+    def rerun_job(self, jid):
+        r = self.api({"op": "rerun", "id": jid})
+        if r and r.get("ok"):
+            self.statusBar().showMessage("נוספה עבודה חוזרת מספר %d" % r["id"], 5000)
+            self.tabs.setCurrentIndex(0)
+
+    def open_submit(self, preselect=None, prefill=None):
         if not self.types:
             return
-        dlg = SubmitDialog(self, self.types, preselect)
+        dlg = SubmitDialog(self, self.types, preselect, prefill)
         if dlg.exec() == W.QDialog.Accepted:
             r = self.api(dlg.request())
             if r and r.get("ok"):
@@ -845,7 +942,30 @@ class Main(W.QMainWindow):
         m.addAction("פתח", lambda: os.startfile(fp))
         m.addAction("פתח את תיקיית העבודה", lambda: os.startfile(str(Path(fp).parent)))
         m.addAction("העתק נתיב", lambda: W.QApplication.clipboard().setText(fp))
+        rj = Path(fp).parent / "result.json"
+        if rj.exists():
+            try:
+                jid = json.loads(rj.read_text(encoding="utf-8"))["job_id"]
+                m.addAction("הרץ שוב את העבודה שיצרה את הקובץ", lambda: self.rerun_job(jid))
+            except (OSError, ValueError, KeyError):
+                pass
         m.exec(self.files.viewport().mapToGlobal(pos))
+
+    def hist_rerun(self):
+        rows = sorted({i.row() for i in self.hist.selectedIndexes()})
+        if not rows or rows[0] >= len(self.hist_jobs):
+            self.statusBar().showMessage("בחר קודם עבודה בהיסטוריה", 4000)
+            return
+        for r in rows:
+            self.rerun_job(self.hist_jobs[r]["id"])
+
+    def hist_menu(self, pos):
+        if not self.hist.selectedIndexes():
+            return
+        m = W.QMenu(self)
+        m.addAction("הרץ שוב עם אותן הגדרות", self.hist_rerun)
+        m.addAction("פתח את תיקיית התוצאה", lambda: self.hist_open(self.hist.currentItem()) if self.hist.currentItem() else None)
+        m.exec(self.hist.viewport().mapToGlobal(pos))
 
     def hist_open(self, item):
         r = item.row()

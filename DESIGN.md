@@ -21,6 +21,9 @@ Walk the queue in order. Start a job when ALL hold: not paused / not "playing" (
 ## Independence
 Own folder and repo; no imports from the games. Project-specific job types and paths live in `adapters/<name>/` (jobtypes + vars), generic ones in `jobtypes/`.
 
+## Output folders and the two ways in
+Every job gets `output/<model type>/<date>_<name>/` (ASCII slug), created by the broker, also exported as `{outdir}` / `AIBROKER_OUTDIR`; the broker writes `result.json` (job id, seconds, peaks, command) and `job.log` there. The window's main area is Models (per-type output browser with thumbnails, open folder, re-run) + Queue/History + Resources. The owner submits with a minimal dialog (type, input file or drop, name; advanced folded) and re-runs from History or from a file's menu; Claude uses MCP/CLI (`submit_job`, `rerun_job`). Both create the same job in the same queue.
+
 ## Control
 Owner: drag rows / right-click run next, up, down, pause, cancel; Pause all (queue only, or also suspend running); big **I am playing / recording** toggle (no GPU starts, running GPU jobs suspended, resumes on off). `PAUSE_AI.bat` / `RESUME_AI.bat` / `PLAYING_ON.bat` / `PLAYING_OFF.bat`.
 
