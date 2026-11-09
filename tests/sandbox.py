@@ -19,6 +19,14 @@ QtCore.QSettings.setDefaultFormat(QtCore.QSettings.IniFormat)
 QtCore.QSettings.setPath(QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope, DIR)
 
 
+def lenient_limits():
+    """Budgets that never block a tiny test job (a CI machine can have only 7 GB, a little of it free): for the tests that start their own throw-away broker."""
+    import json
+    with open(os.path.join(DIR, "config.json"), "w", encoding="utf-8") as f:
+        json.dump({"limits": {"ram_gb": 100.0, "vram_gb": 100.0, "max_jobs": 4, "reserve_ram_gb": 0.2, "min_commit_free_gb": 0.0, "hard_free_ram_gb": 0.1,
+                              "hard_commit_free_gb": 0.0, "disk_busy_pct": 100.0}}, f)
+
+
 def require_running_broker():
     """The tests read the real service. If it is down, stop: never start a service with the throw-away folder on the real port."""
     from aibroker import client

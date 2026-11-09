@@ -5,6 +5,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT); sys.path.insert(0, os.path.join(ROOT, "tests"))
 os.chdir(ROOT)
 import sandbox
+sandbox.lenient_limits()
 os.environ["AIBROKER_PORT"] = "47697"
 from PySide6 import QtWidgets as W, QtCore
 from PySide6.QtCore import Qt

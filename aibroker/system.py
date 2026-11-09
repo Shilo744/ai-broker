@@ -41,7 +41,7 @@ def set_autostart(on):
             pass
         return not LINK.exists()
     STARTUP_DIR.mkdir(parents=True, exist_ok=True)
-    exe = str(paths.VENV_PYW if paths.VENV_PYW.exists() else paths.VENV_PY)
+    exe = str(paths.VENV_PYW if paths.VENV_PYW.exists() else paths.PYTHON)
     if not osutil.IS_WIN:
         return _write_autostart_file(exe)
     ico = paths.ROOT / "assets" / "ai-broker-v3.ico"
@@ -88,7 +88,7 @@ def claude_registered():
 
 def register_claude():
     """Same as register.bat: add the MCP server for this user (all projects) and copy the skill file. Returns (ok, message)."""
-    py = str(paths.VENV_PY)
+    py = str(paths.PYTHON)
     launcher = str(paths.ROOT / "mcp_launch.py")
     try:
         r = subprocess.run([_claude(), "mcp", "add", "ai-broker", "--scope", "user", "--env", "AIJOB_REQUESTER=claude", "--", py, launcher],

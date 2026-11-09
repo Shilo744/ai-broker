@@ -68,7 +68,7 @@ def write_mcp_config(requester=T("claude (עוזר)")):
         base = json.loads(MCP_JSON.read_text(encoding="utf-8"))
         srv = base["mcpServers"]["ai-broker"]
     except (OSError, ValueError, KeyError):
-        base = {"mcpServers": {"ai-broker": {"command": str(paths.VENV_PY), "args": [str(paths.ROOT / "mcp_launch.py")]}}}
+        base = {"mcpServers": {"ai-broker": {"command": str(paths.PYTHON), "args": [str(paths.ROOT / "mcp_launch.py")]}}}
         srv = base["mcpServers"]["ai-broker"]
     env = dict(srv.get("env") or {})
     env.update(AIJOB_REQUESTER=requester, AIBROKER_ASSISTANT="1")

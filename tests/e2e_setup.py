@@ -16,6 +16,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 sys.path.insert(0, os.path.join(ROOT, "tests"))
 import sandbox                                      # temp data folder (AIBROKER_HOME)
+sandbox.lenient_limits()
 
 os.environ["AIBROKER_PORT"] = "47698"
 from aibroker import client, paths

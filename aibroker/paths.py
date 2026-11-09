@@ -50,6 +50,8 @@ else:
     VENV_PY = ROOT / ".venv" / "bin" / "python"
     VENV_PYW = VENV_PY
 
+PYTHON = VENV_PY if VENV_PY.exists() else Path(sys.executable)      # the private environment when it exists, otherwise the Python that runs us
+
 GAMES = "C:/Migrated/Projects/Personal/Games"          # only the default place of the shared legacy GPU lock (used when that folder exists)
 
 
@@ -81,10 +83,12 @@ def auto_limits():
         except Exception:
             gpu_total = 0.0
     ram = round(total * 0.8, 1)
+    # Windows has a pagefile commit charge, so it gets its own floors; elsewhere "commit" is RAM + swap and the floors are the same as for RAM
     lim = dict(DEFAULT_CONFIG["limits"])
+    reserve, hard = round(max(2.0, total * 0.1), 1), round(max(1.0, total * 0.05), 1)
     lim.update(ram_gb=ram, vram_gb=round(gpu_total * 0.9, 1) if gpu_total else ram, max_jobs=2 if total < 24 else 4,
-               reserve_ram_gb=round(max(2.0, total * 0.1), 1), min_commit_free_gb=round(max(4.0, total * 0.15), 1),
-               hard_free_ram_gb=round(max(1.0, total * 0.05), 1), hard_commit_free_gb=round(max(2.0, total * 0.1), 1))
+               reserve_ram_gb=reserve, min_commit_free_gb=round(max(4.0, total * 0.15), 1) if IS_WIN else reserve,
+               hard_free_ram_gb=hard, hard_commit_free_gb=round(max(2.0, total * 0.1), 1) if IS_WIN else hard)
     return lim
 
 
@@ -120,7 +124,7 @@ DEFAULT_CONFIG = {
     "output_root": str(ROOT / "output").replace("\\", "/"),   # every model type gets its own folder under here
     "vars": {                         # {name} placeholders in jobtypes/*.json cmd templates
         "py_comfy": "C:/Migrated/AI/ComfyUI-Easy-Install/python_embeded/python.exe" if IS_WIN else "",
-        "py_venv": str(VENV_PY).replace("\\", "/"),
+        "py_venv": str(PYTHON).replace("\\", "/"),
         "blender": _default_blender(),
         "runners": str(ROOT / "runners").replace("\\", "/"),
     },
