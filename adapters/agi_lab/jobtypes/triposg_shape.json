@@ -50,5 +50,11 @@
  "he_title": "דגם תלת-ממד מתמונה",
  "he_desc": "הופך תמונה לצורה תלת-ממדית (TripoSG)",
  "he_group": "תלת-ממד",
- "output_dir": "tripo_shape"
+ "output_dir": "tripo_shape",
+ "chat": {
+  "text": null,
+  "file": "ref",
+  "needs_file": true,
+  "hint": "זה הופך תמונה של חפץ או דמות לדגם תלת-ממד (GLB). גרור תמונה על רקע ירוק או שקוף ולחץ שלח. אין צורך בטקסט. לוקח כדקה וחצי."
+ }
 }

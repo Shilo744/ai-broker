@@ -452,7 +452,7 @@ class Broker:
     def job_view(self, j):
         lv = self.live.get(j["id"])
         d = {k: j[k] for k in ("id", "type", "name", "requester", "state", "model", "klass", "est_ram", "est_vram", "est_commit", "est_source", "held", "manual", "submitted",
-                              "started", "finished", "rc", "peak_ws", "peak_commit", "peak_vram", "after_id", "note", "pid", "outdir")}
+                              "started", "finished", "rc", "peak_ws", "peak_commit", "peak_vram", "after_id", "note", "pid", "outdir", "params")}
         d["pos"] = j["pos"]
         if lv:
             d.update(cur_ws=round(lv.cur_ws, 2), cur_vram=round(lv.cur_vram, 2), elapsed=round(time.time() - lv.t0), suspended=lv.suspended)

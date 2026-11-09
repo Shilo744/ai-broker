@@ -17,6 +17,9 @@ from . import client, paths
 QSS = """
 * { font-family: 'Segoe UI'; font-size: 11.5pt; color: #e6e8ee; }
 QMainWindow, QDialog, QWidget#page { background: #0f1115; }
+QFrame#bubble_user { background: #1b2740; border: 1px solid #2a3b60; border-radius: 12px; }
+QFrame#bubble_model { background: #171a21; border: 1px solid #262b36; border-radius: 12px; }
+QFrame#composer { background: #12151b; border: 1px solid #2c3340; border-radius: 12px; }
 QFrame#panel { background: #14171d; border: 1px solid #262b36; border-radius: 10px; }
 QLabel { background: transparent; }
 QLabel#h1 { font-size: 17pt; font-weight: 600; } QLabel#h2 { font-size: 12.5pt; font-weight: 600; color: #aeb6c7; }
@@ -449,6 +452,343 @@ class AdvancedDialog(W.QDialog):
         lay.addLayout(row)
 
 
+
+class Thumb(W.QLabel):
+    """A clickable picture or file tile inside a chat bubble."""
+    def __init__(self, pixmap, path, size=150):
+        super().__init__()
+        self.path = path
+        self.setPixmap(pixmap)
+        self.setFixedSize(pixmap.size())
+        self.setCursor(Qt.PointingHandCursor)
+        self.setToolTip(path)
+        self.setStyleSheet("border-radius:8px;")
+
+    def mouseReleaseEvent(self, e):
+        if e.button() == Qt.LeftButton and os.path.exists(self.path):
+            os.startfile(self.path)
+
+
+class Bubble(W.QFrame):
+    def __init__(self, who):
+        super().__init__()
+        self.who = who
+        self.setObjectName("bubble_user" if who == "user" else "bubble_model")
+        self.lay = W.QVBoxLayout(self)
+        self.lay.setContentsMargins(14, 10, 14, 10)
+        self.lay.setSpacing(8)
+        self.setMaximumWidth(620)
+
+    def text(self, t, muted=False, selectable=True):
+        l = W.QLabel(t)
+        l.setWordWrap(True)
+        if muted:
+            l.setObjectName("muted")
+        if selectable:
+            l.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.lay.addWidget(l)
+        return l
+
+    def row(self, widgets):
+        h = W.QHBoxLayout()
+        h.setSpacing(8)
+        for w in widgets:
+            h.addWidget(w)
+        h.addStretch(1)
+        self.lay.addLayout(h)
+
+
+class ChatPanel(W.QFrame):
+    """A normal chat with one model: you write (and drop a file), the model answers with its result. Built from the job history of that model."""
+    def __init__(self, main):
+        super().__init__()
+        self.main = main
+        self.setObjectName("panel")
+        self.attached = None
+        self.sig = None
+        v = W.QVBoxLayout(self)
+        v.setContentsMargins(12, 10, 12, 10)
+        v.setSpacing(8)
+        head = W.QHBoxLayout()
+        self.title = W.QLabel("")
+        self.title.setObjectName("h2")
+        self.path = W.QLabel("")
+        self.path.setObjectName("muted")
+        self.path.setLayoutDirection(Qt.LeftToRight)
+        b = W.QPushButton("פתח תיקייה")
+        b.setObjectName("tool")
+        b.clicked.connect(main.open_model_folder)
+        head.addWidget(self.title)
+        head.addWidget(self.path, 1)
+        head.addWidget(b)
+        v.addLayout(head)
+        self.scroll = W.QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setFrameShape(W.QFrame.NoFrame)
+        self.body = W.QWidget()
+        self.body.setStyleSheet("background: transparent;")
+        self.scroll.viewport().setStyleSheet("background: transparent;")
+        self.col = W.QVBoxLayout(self.body)
+        self.col.setContentsMargins(0, 0, 6, 0)
+        self.col.setSpacing(10)
+        self.scroll.setWidget(self.body)
+        v.addWidget(self.scroll, 1)
+        # composer
+        self.comp = W.QFrame()
+        self.comp.setObjectName("composer")
+        cl = W.QVBoxLayout(self.comp)
+        cl.setContentsMargins(10, 8, 10, 8)
+        cl.setSpacing(6)
+        self.chips = W.QHBoxLayout()
+        cl.addLayout(self.chips)
+        self.edit = W.QPlainTextEdit()
+        self.edit.setFixedHeight(62)
+        self.edit.setLayoutDirection(Qt.LeftToRight)
+        self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #e6e8ee; font-family: 'Segoe UI'; font-size: 11.5pt; }")
+        self.edit.setPlaceholderText("כתוב כאן מה לעשות…  (Enter לשליחה)")
+        self.edit.installEventFilter(self)
+        cl.addWidget(self.edit)
+        row = W.QHBoxLayout()
+        self.attach_btn = W.QPushButton("צרף קובץ")
+        self.attach_btn.setObjectName("tool")
+        self.attach_btn.clicked.connect(self.pick)
+        self.adv_btn = W.QPushButton("מתקדם…")
+        self.adv_btn.setObjectName("tool")
+        self.adv_btn.clicked.connect(lambda: main.open_submit(main.model_first_type(), self.attached))
+        self.send_btn = W.QPushButton("שלח")
+        self.send_btn.setObjectName("primary")
+        self.send_btn.clicked.connect(self.send)
+        self.hint_lbl = W.QPushButton("איך זה עובד?")
+        self.hint_lbl.setObjectName("tool")
+        self.hint_lbl.clicked.connect(self.explain)
+        row.addWidget(self.send_btn)
+        row.addWidget(self.attach_btn)
+        row.addWidget(self.adv_btn)
+        row.addStretch(1)
+        row.addWidget(self.hint_lbl)
+        cl.addLayout(row)
+        v.addWidget(self.comp)
+        self.setAcceptDrops(True)
+
+    # --- input
+    def eventFilter(self, obj, ev):
+        if obj is self.edit and ev.type() == QtCore.QEvent.KeyPress and ev.key() in (Qt.Key_Return, Qt.Key_Enter) and not (ev.modifiers() & Qt.ShiftModifier):
+            self.send()
+            return True
+        return super().eventFilter(obj, ev)
+
+    def dragEnterEvent(self, e):
+        if e.mimeData().hasUrls():
+            e.acceptProposedAction()
+
+    def dropEvent(self, e):
+        for u in e.mimeData().urls():
+            if u.isLocalFile():
+                self.set_attached(u.toLocalFile().replace("\\", "/"))
+                e.acceptProposedAction()
+                break
+
+    def pick(self):
+        p, _ = W.QFileDialog.getOpenFileName(self, "בחר קובץ")
+        if p:
+            self.set_attached(p)
+
+    def set_attached(self, path):
+        self.attached = path
+        while self.chips.count():
+            it = self.chips.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        if path:
+            pm = QtGui.QPixmap(path)
+            if not pm.isNull():
+                t = W.QLabel()
+                t.setPixmap(pm.scaled(44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                self.chips.addWidget(t)
+            lab = W.QLabel(Path(path).name)
+            lab.setObjectName("muted")
+            x = W.QPushButton("הסר")
+            x.setObjectName("tool")
+            x.clicked.connect(lambda: self.set_attached(None))
+            self.chips.addWidget(lab)
+            self.chips.addWidget(x)
+            self.chips.addStretch(1)
+
+    def explain(self):
+        tid, cfg = self.cfg()
+        if cfg:
+            nl = chr(10)
+            txt = cfg["hint"]
+            if cfg.get("examples"):
+                txt += nl + nl + "דוגמאות:" + nl + nl.join(cfg["examples"])
+            W.QMessageBox.information(self, "איך זה עובד", txt + nl + nl + "Enter שולח. Shift+Enter שורה חדשה.")
+
+    def cfg(self):
+        tid = self.main.model_first_type()
+        return tid, (self.main.types.get(tid, {}).get("chat") if tid else None)
+
+    def last_result_image(self):
+        for j in self.main.model_jobs():
+            pass
+        best = None
+        for j in self.main.model_jobs():
+            d = j.get("outdir")
+            if j["state"] == "done" and d and os.path.isdir(d):
+                for n in sorted(os.listdir(d)):
+                    if Path(n).suffix.lower() in IMG and n != "ref_rgba.png":
+                        best = os.path.join(d, n).replace("\\", "/")
+        return best
+
+    def send(self):
+        tid, cfg = self.cfg()
+        if not cfg:
+            return
+        text = self.edit.toPlainText().strip()
+        params = {}
+        if cfg.get("text"):
+            if not text:
+                self.main.statusBar().showMessage("כתוב מה לעשות", 4000)
+                return
+            params[cfg["text"]] = text
+        f = self.attached
+        if cfg.get("file"):
+            if not f and cfg.get("needs_file"):
+                f = self.last_result_image()          # keep talking: the next message edits the last result
+            if not f and cfg.get("needs_file"):
+                self.main.statusBar().showMessage("צרף קובץ (גרור לכאן או ״צרף קובץ״)", 4000)
+                return
+            if f:
+                params[cfg["file"]] = f
+        name = (text[:28] if text else Path(f or "job").stem[:28])
+        r = self.main.api(dict(op="submit", type=tid, params=params, name=name, requester="owner"))
+        if r and r.get("ok"):
+            self.edit.clear()
+            self.set_attached(None)
+            self.sig = None
+            self.main.refresh_chat(force=True)
+
+    # --- render
+    def build(self, force=False):
+        m = self.main
+        tid, cfg = self.cfg()
+        g = next((x for x in m.models if x["dir"] == m.sel_model), None)
+        self.title.setText(("שיחה עם: " + g["title"]) if g else "")
+        self.path.setText(str(m.model_folder()))
+        jobs = m.model_jobs()
+        sig = (m.sel_model, tuple((j["id"], j["state"], bool(j.get("held")), int(j.get("elapsed", 0)) // 5, len(self.outfiles(j))) for j in jobs), bool(cfg))
+        if sig == self.sig and not force:
+            return
+        self.sig = sig
+        while self.col.count():
+            it = self.col.takeAt(0)
+            if it.widget():
+                it.widget().deleteLater()
+        can = bool(cfg)
+        self.comp.setVisible(can)
+        self.attach_btn.setVisible(bool(cfg and cfg.get("file")))
+        # explanation bubble (always first)
+        b = Bubble("model")
+        if cfg:
+            b.text(cfg["hint"])
+            if cfg.get("examples"):
+                b.text("דוגמאות (לחץ כדי להעתיק לתיבה):", muted=True)
+                for ex in cfg["examples"]:
+                    btn = W.QPushButton(ex)
+                    btn.setObjectName("tool")
+                    btn.setLayoutDirection(Qt.LeftToRight)
+                    btn.clicked.connect(lambda _=False, e=ex: self.edit.setPlainText(e))
+                    b.lay.addWidget(btn)
+        else:
+            b.text("לסוג הזה עדיין אין שיחה. הוא משמש בעיקר את Claude. אפשר לשלוח עבודה ידנית דרך הכפתור למטה, והתוצאות יופיעו כאן.")
+            btn = W.QPushButton("שלח עבודה ידנית…")
+            btn.clicked.connect(lambda: m.open_submit(m.model_first_type()))
+            b.lay.addWidget(btn, 0, Qt.AlignRight)
+        self.col.addWidget(b, 0, Qt.AlignRight)
+        for j in jobs:
+            self.add_job(j, cfg)
+        self.col.addStretch(1)
+        QtCore.QTimer.singleShot(30, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))
+
+    @staticmethod
+    def outfiles(j):
+        d = j.get("outdir")
+        out = []
+        if d and os.path.isdir(d):
+            for root, _x, names in os.walk(d):
+                for n in sorted(names):
+                    if n not in HIDDEN_FILES:
+                        out.append(os.path.join(root, n))
+        return out
+
+    def add_job(self, j, cfg):
+        params = j.get("params") or {}
+        u = Bubble("user")
+        txt = params.get((cfg or {}).get("text") or "") if cfg else None
+        if txt:
+            u.text(str(txt))
+        fp = params.get((cfg or {}).get("file") or "") if cfg else None
+        if fp and os.path.exists(str(fp)):
+            pm = QtGui.QPixmap(str(fp))
+            if not pm.isNull():
+                u.row([Thumb(pm.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation), str(fp))])
+        if not txt and not (fp and os.path.exists(str(fp))):
+            u.text(j["name"])
+        u.text("#%d  •  %s" % (j["id"], j["requester"]), muted=True)
+        self.col.addWidget(u, 0, Qt.AlignLeft)
+        a = Bubble("model")
+        st = "held" if j["state"] == "queued" and j.get("held") else ("paused" if j.get("suspended") else j["state"])
+        if st in ("queued", "held"):
+            a.text("ממתין בתור: " + ("עצרת אותה בעצמך" if st == "held" else he_reason(j.get("reason", ""))), muted=True)
+        elif st in ("running", "paused"):
+            a.text("%s  %s   •   RAM %s" % ("עובד על זה" if st == "running" else "מוקפא", fmt_dur(j.get("elapsed", 0)), ltr("%.1f GB" % j.get("cur_ws", 0))))
+            pb = W.QProgressBar()
+            pb.setRange(0, 0)
+            pb.setTextVisible(False)
+            pb.setFixedHeight(5)
+            a.lay.addWidget(pb)
+        elif st == "done":
+            dur = (j.get("finished") or 0) - (j.get("started") or j.get("finished") or 0)
+            a.text("מוכן (%s)" % fmt_dur(dur), muted=True)
+            tiles = []
+            for f in self.outfiles(j)[:8]:
+                if Path(f).suffix.lower() in IMG:
+                    pm = QtGui.QPixmap(f)
+                    if not pm.isNull():
+                        tiles.append(Thumb(pm.scaled(210, 210, Qt.KeepAspectRatio, Qt.SmoothTransformation), f))
+                        continue
+                sym, col = KIND.get(Path(f).suffix.lower(), ("▫", "#8b93a5"))
+                t = Thumb(symbol_pixmap(sym, col, 84), f)
+                t.setToolTip(f)
+                tiles.append(t)
+            if tiles:
+                a.row(tiles)
+                names = W.QLabel("  ".join(Path(f).name for f in self.outfiles(j)[:4]))
+                names.setObjectName("muted")
+                names.setLayoutDirection(Qt.LeftToRight)
+                a.lay.addWidget(names)
+        else:
+            a.text("%s (קוד %s). ראה פירוט בהיסטוריה." % ("נכשל" if st == "failed" else {"cancelled": "בוטל", "lost": "לא ידוע"}.get(st, st), j.get("rc")), muted=True)
+        row = W.QHBoxLayout()
+        if st in ("done", "failed", "cancelled"):
+            rb = W.QPushButton("הרץ שוב")
+            rb.setObjectName("tool")
+            rb.clicked.connect(lambda _=False, i=j["id"]: self.main.rerun_job(i))
+            row.addWidget(rb)
+            if j.get("outdir"):
+                ob = W.QPushButton("פתח תיקייה")
+                ob.setObjectName("tool")
+                ob.clicked.connect(lambda _=False, d=j["outdir"]: os.startfile(d) if os.path.isdir(d) else None)
+                row.addWidget(ob)
+        if st in ("queued", "held", "running", "paused"):
+            cb = W.QPushButton("בטל")
+            cb.setObjectName("tool")
+            cb.clicked.connect(lambda _=False, i=j["id"]: self.main.api({"op": "cancel", "id": i}))
+            row.addWidget(cb)
+        row.addStretch(1)
+        a.lay.addLayout(row)
+        self.col.addWidget(a, 0, Qt.AlignRight)
+
+
 class Main(W.QMainWindow):
     def __init__(self, tray=True, model=None):
         super().__init__()
@@ -522,13 +862,9 @@ class Main(W.QMainWindow):
         self.pause.setCheckable(True)
         self.pause.setToolTip("שום עבודה חדשה לא מתחילה עד שתמשיך")
         self.pause.clicked.connect(lambda on: self.api({"op": "pause"} if on else {"op": "resume"}))
-        sub = W.QPushButton("עבודה חדשה")
-        sub.setObjectName("primary")
-        sub.setToolTip("שלח עבודה בעצמך: בחר סוג וקובץ")
-        sub.clicked.connect(lambda: self.open_submit())
         adv = W.QPushButton("מתקדם")
         adv.clicked.connect(self.open_advanced)
-        for b in (sub, self.play, self.pause, adv):
+        for b in (self.play, self.pause, adv):
             head.addWidget(b)
         v.addLayout(head)
         split = W.QSplitter(Qt.Horizontal)
@@ -633,12 +969,8 @@ class Main(W.QMainWindow):
         self.open_btn = W.QPushButton("פתח תיקייה")
         self.open_btn.setObjectName("tool")
         self.open_btn.clicked.connect(self.open_model_folder)
-        self.new_btn = W.QPushButton("עבודה חדשה במודל הזה")
-        self.new_btn.setObjectName("tool")
-        self.new_btn.clicked.connect(lambda: self.open_submit(self.model_first_type()))
         oh.addWidget(self.out_title)
         oh.addWidget(self.out_path, 1)
-        oh.addWidget(self.new_btn)
         oh.addWidget(self.open_btn)
         ol.addLayout(oh)
         self.files = W.QListWidget()
@@ -659,8 +991,12 @@ class Main(W.QMainWindow):
         self.files_empty.setObjectName("muted")
         self.files_empty.setAlignment(Qt.AlignCenter)
         ol.addWidget(self.files_empty)
-        cs.addWidget(outp)
-        cs.setSizes([300, 400])
+        self.chat = ChatPanel(self)
+        self.lower = W.QStackedWidget()
+        self.lower.addWidget(outp)
+        self.lower.addWidget(self.chat)
+        cs.addWidget(self.lower)
+        cs.setSizes([150, 600])
         split.addWidget(cs)
         rp = self._panel()
         rl = W.QVBoxLayout(rp)
@@ -784,6 +1120,9 @@ class Main(W.QMainWindow):
             if u.isLocalFile():
                 path = u.toLocalFile().replace("\\", "/")
                 pre = self.model_first_type()
+                if pre and (self.types.get(pre, {}).get("chat") or {}).get("file"):
+                    self.chat.set_attached(path)
+                    return
                 if not pre:
                     pre = "qwen_image_edit" if Path(path).suffix.lower() in IMG else None
                 self.open_submit(pre, path)
@@ -860,7 +1199,31 @@ class Main(W.QMainWindow):
             return
         self.sel_model = self.model_list.item(row).data(Qt.UserRole)
         self.files_sig = None
+        self.lower.setCurrentIndex(1 if self.sel_model else 0)
+        sp = self.lower.parent()
+        if isinstance(sp, W.QSplitter):
+            sp.setSizes([150, 600] if self.sel_model else [300, 400])
+        self.chat.set_attached(None)
         self.refresh_files()
+        self.refresh_chat(force=True)
+
+    def model_jobs(self):
+        """Every job of the selected model, oldest first (running + waiting + finished)."""
+        g = next((m for m in self.models if m["dir"] == self.sel_model), None)
+        if not g:
+            return []
+        tids = set(g["tids"])
+        seen, out = set(), []
+        s = self.state or {}
+        for j in list(self.hist_jobs) + s.get("running", []) + s.get("queued", []):
+            if j["type"] in tids and j["id"] not in seen:
+                seen.add(j["id"])
+                out.append(j)
+        return sorted(out, key=lambda j: j["id"])
+
+    def refresh_chat(self, force=False):
+        if self.sel_model and self.models:
+            self.chat.build(force)
 
     def model_folder(self):
         return Path(self.output_root) / self.sel_model if self.sel_model else Path(self.output_root)
@@ -908,6 +1271,10 @@ class Main(W.QMainWindow):
     def refresh_files(self):
         if not self.models:
             return
+        if self.sel_model:
+            self.refresh_chat()
+            self.out_path.setText(str(self.model_folder()))
+            return
         g = next((m for m in self.models if m["dir"] == self.sel_model), None)
         self.out_title.setText(("תוצאות: " + g["title"]) if g else "כל התוצאות")
         self.out_path.setText(str(self.model_folder()))
@@ -918,11 +1285,6 @@ class Main(W.QMainWindow):
         self.files_sig = sig
         self.files.setUpdatesEnabled(False)
         self.files.clear()
-        gcol = g["color"] if g else "#4f8cff"
-        new = W.QListWidgetItem(QtGui.QIcon(symbol_pixmap("+", gcol, 110)), ("יצירה חדשה" if g else "עבודה חדשה") + chr(10) + "לחץ כאן")
-        new.setData(Qt.UserRole, "__new__")
-        new.setToolTip("שלח עבודה חדשה במודל הזה (אפשר גם לגרור קובץ לחלון)")
-        self.files.addItem(new)
         for mt, size, fp in files:
             when = time.strftime("%d/%m %H:%M", time.localtime(mt))
             name = fp.name if len(fp.name) < 22 else fp.name[:19] + "…"
@@ -931,7 +1293,7 @@ class Main(W.QMainWindow):
             it.setToolTip("%s\n%s" % (fp, fp.parent.name))
             self.files.addItem(it)
         self.files.setUpdatesEnabled(True)
-        self.files_empty.setText("עוד אין תוצאות. לחץ על ״+״ כדי ליצור, והקבצים יופיעו כאן כשהעבודה תסתיים.")
+        self.files_empty.setText("עוד אין תוצאות. כשעבודה תסתיים, הקבצים יופיעו כאן.")
         self.files_empty.setVisible(not files)
         for i in range(1, self.model_list.count()):
             od = self.model_list.item(i).data(Qt.UserRole)
@@ -1029,6 +1391,7 @@ class Main(W.QMainWindow):
                 val.setText(("%d GB" % lim[k]) if k != "max_jobs" else str(int(lim[k])))
         self.building = False
         self.fill_queue(s)
+        self.refresh_chat()
         self.sb.setText("RAM פנוי: %.0f GB      Commit פנוי: %.0f GB%s" % (sy["ram_avail"], sy["commit_avail"], ("      נעילת GPU: " + {"ours": "אצל ה-broker", "foreign": "אצל תוכנה אחרת"}.get(s["lock"], s["lock"])) if s["lock"] != "none" else ""))
         if self.tray and st != self.last_status:
             self.tray.setIcon(make_icon({"ACTIVE": "#34c38f", "PAUSED": "#f5a524", "PLAYING": "#f0506e", "BRAKE": "#f0506e"}[st]))

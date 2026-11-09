@@ -46,5 +46,15 @@
  "he_title": "יצירת תמונה מטקסט",
  "he_desc": "מצייר תמונה חדשה מתיאור במילים",
  "he_group": "תמונות",
- "output_dir": "zimage"
+ "output_dir": "zimage",
+ "chat": {
+  "text": "prompt",
+  "file": null,
+  "needs_file": false,
+  "hint": "זה מצייר תמונה חדשה מתיאור. הקלד באנגלית מה לצייר ולחץ שלח.",
+  "examples": [
+   "A weathered street courier in a rain jacket, studio light, full body",
+   "A neon-lit alley at night, wet asphalt, cinematic"
+  ]
+ }
 }

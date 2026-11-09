@@ -59,5 +59,16 @@
  "he_title": "עריכת תמונה",
  "he_desc": "משנה תמונה קיימת לפי הוראה במילים",
  "he_group": "תמונות",
- "output_dir": "qwen_edit"
+ "output_dir": "qwen_edit",
+ "chat": {
+  "text": "instruction",
+  "file": "image",
+  "needs_file": true,
+  "hint": "זה עורך תמונות. גרור לכאן תמונה (או לחץ ״צרף״) והקלד באנגלית מה לשנות בה. אחרי שהתוצאה מוכנה אפשר להמשיך לדבר: ההודעה הבאה עורכת את התוצאה האחרונה.",
+  "examples": [
+   "Change the black coat to dark red. Keep everything else identical.",
+   "Make the background plain light grey.",
+   "Remove the sunglasses."
+  ]
+ }
 }
