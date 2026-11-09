@@ -1,2 +1,20 @@
-{"id": "custom", "title": "Any command (you give the estimates)", "group": "Other", "klass": "cpu",
- "est": {"ram_gb": 2, "vram_gb": 0, "commit_gb": 3}, "params": {}, "cmd": ["{*extra}"]}
+{
+ "id": "custom",
+ "title": "Any command (you give the estimates)",
+ "group": "Other",
+ "klass": "cpu",
+ "est": {
+  "ram_gb": 2,
+  "vram_gb": 0,
+  "commit_gb": 3
+ },
+ "params": {},
+ "cmd": [
+  "{*extra}"
+ ],
+ "icon": "⚙️",
+ "color": "#78909c",
+ "he_title": "פקודה אחרת",
+ "he_desc": "כל תוכנה שתכתוב לה פקודה",
+ "he_group": "אחר"
+}

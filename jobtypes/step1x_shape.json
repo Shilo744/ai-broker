@@ -33,5 +33,10 @@
   "{lab}/modular/v3/part_shape_step1x.py",
   "{jobs}",
   "{*names}"
- ]
+ ],
+ "icon": "🗿",
+ "color": "#3b82c4",
+ "he_title": "דגם תלת-ממד, מודל שני",
+ "he_desc": "אותו דבר עם מודל אחר, להשוואה (Step1X)",
+ "he_group": "תלת-ממד"
 }

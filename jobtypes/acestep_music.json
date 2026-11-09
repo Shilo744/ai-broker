@@ -23,5 +23,10 @@
   "-I",
   "{script}",
   "{*args}"
- ]
+ ],
+ "icon": "🎵",
+ "color": "#43a047",
+ "he_title": "יצירת מוזיקה",
+ "he_desc": "מלחין מוזיקה (ACE-Step)",
+ "he_group": "שמע"
 }

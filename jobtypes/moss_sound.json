@@ -24,5 +24,10 @@
   "-I",
   "{script}",
   "{*args}"
- ]
+ ],
+ "icon": "🔊",
+ "color": "#c9a227",
+ "he_title": "יצירת צלילים",
+ "he_desc": "אפקטים וקולות (MOSS)",
+ "he_group": "שמע"
 }
