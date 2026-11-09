@@ -1,0 +1,43 @@
+{
+ "id": "zimage_t2i",
+ "title": "Z-Image-Turbo text to image (ComfyUI)",
+ "group": "Images",
+ "klass": "gpu",
+ "model": "comfy-zimage",
+ "est": {
+  "ram_gb": 14,
+  "vram_gb": 9,
+  "commit_gb": 18
+ },
+ "max_parallel": 1,
+ "notes": "guess until measured",
+ "params": {
+  "prompt": {
+   "required": true
+  },
+  "out": {
+   "required": true
+  },
+  "w": 832,
+  "h": 1216,
+  "seed": 1,
+  "steps": 8
+ },
+ "cmd": [
+  "{py_comfy}",
+  "-I",
+  "{runners}/zimage_t2i.py",
+  "--prompt",
+  "{prompt}",
+  "--out",
+  "{out}",
+  "--w",
+  "{w}",
+  "--h",
+  "{h}",
+  "--seed",
+  "{seed}",
+  "--steps",
+  "{steps}"
+ ]
+}

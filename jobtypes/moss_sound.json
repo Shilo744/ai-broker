@@ -1,0 +1,28 @@
+{
+ "id": "moss_sound",
+ "title": "MOSS sound / foley script",
+ "group": "Audio",
+ "klass": "gpu",
+ "model": "moss",
+ "est": {
+  "ram_gb": 8,
+  "vram_gb": 5,
+  "commit_gb": 10
+ },
+ "max_parallel": 1,
+ "notes": "guess until measured",
+ "params": {
+  "script": {
+   "required": true
+  },
+  "args": {
+   "default": []
+  }
+ },
+ "cmd": [
+  "{py_comfy}",
+  "-I",
+  "{script}",
+  "{*args}"
+ ]
+}

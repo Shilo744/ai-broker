@@ -1,0 +1,33 @@
+{
+ "id": "godot_shots",
+ "title": "Godot rendered screenshots (hidden desktop, muted)",
+ "group": "Game",
+ "klass": "gpu",
+ "model": "godot-gpu",
+ "est": {
+  "ram_gb": 4,
+  "vram_gb": 3,
+  "commit_gb": 6
+ },
+ "max_parallel": 1,
+ "self_lock": true,
+ "notes": "run_game.py takes the shared GPU lock itself; the broker will not start it while one of its own GPU jobs holds the lock.",
+ "params": {
+  "scenario": {
+   "required": true
+  },
+  "secs": 60
+ },
+ "cwd": "{game}",
+ "env": {
+  "AGIW_IDLE_MB": "6000"
+ },
+ "cmd": [
+  "{py_sys}",
+  "{game}/tools/run_game.py",
+  "shots",
+  "{scenario}",
+  "{secs}",
+  "--wait"
+ ]
+}

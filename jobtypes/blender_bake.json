@@ -1,0 +1,40 @@
+{
+ "id": "blender_bake",
+ "title": "Blender bake: normal + AO from the raw shape (lab part_bake.py)",
+ "group": "3D",
+ "klass": "cpu",
+ "model": "blender",
+ "est": {
+  "ram_gb": 6,
+  "vram_gb": 0,
+  "commit_gb": 8
+ },
+ "max_parallel": 2,
+ "params": {
+  "raw": {
+   "required": true
+  },
+  "clean": {
+   "required": true
+  },
+  "outdir": {
+   "required": true
+  },
+  "res": 2048,
+  "script": "{lab}/modular/v3/part_bake.py",
+  "threads": 8
+ },
+ "cmd": [
+  "{blender}",
+  "-b",
+  "--threads",
+  "{threads}",
+  "--python",
+  "{script}",
+  "--",
+  "{raw}",
+  "{clean}",
+  "{outdir}",
+  "{res}"
+ ]
+}

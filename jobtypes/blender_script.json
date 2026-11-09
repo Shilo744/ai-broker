@@ -1,0 +1,34 @@
+{
+ "id": "blender_script",
+ "title": "Blender background script",
+ "group": "3D",
+ "klass": "cpu",
+ "model": "blender",
+ "est": {
+  "ram_gb": 4,
+  "vram_gb": 0,
+  "commit_gb": 5
+ },
+ "max_parallel": 3,
+ "notes": "Lab: cleaning 2M-face meshes 3.3-5.6 GB; 4M-face meshes up to 15 GB (give --ram for those).",
+ "params": {
+  "script": {
+   "required": true
+  },
+  "args": {
+   "default": [],
+   "help": "list passed after --"
+  },
+  "threads": 8
+ },
+ "cmd": [
+  "{blender}",
+  "-b",
+  "--threads",
+  "{threads}",
+  "--python",
+  "{script}",
+  "--",
+  "{*args}"
+ ]
+}

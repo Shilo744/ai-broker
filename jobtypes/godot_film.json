@@ -1,0 +1,32 @@
+{
+ "id": "godot_film",
+ "title": "Godot film (frames + mp4, hidden desktop, muted)",
+ "group": "Game",
+ "klass": "gpu",
+ "model": "godot-gpu",
+ "est": {
+  "ram_gb": 5,
+  "vram_gb": 3,
+  "commit_gb": 7
+ },
+ "max_parallel": 1,
+ "self_lock": true,
+ "params": {
+  "scenario": {
+   "required": true
+  },
+  "secs": 30
+ },
+ "cwd": "{game}",
+ "env": {
+  "AGIW_IDLE_MB": "6000"
+ },
+ "cmd": [
+  "{py_sys}",
+  "{game}/tools/run_game.py",
+  "film",
+  "{scenario}",
+  "{secs}",
+  "--wait"
+ ]
+}

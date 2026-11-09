@@ -1,0 +1,48 @@
+{
+ "id": "triposg_shape",
+ "title": "TripoSG shape (image to raw GLB)",
+ "group": "3D",
+ "klass": "gpu",
+ "model": "triposg",
+ "est_key": "triposg_shape:d{depth}",
+ "est": {
+  "ram_gb": 7,
+  "vram_gb": 7,
+  "commit_gb": 16
+ },
+ "max_parallel": 1,
+ "notes": "Lab peaks 2026-11-09: working set 6.8 GB, commit 15.9 GB, VRAM 5.7-6.9 GB at depth 9. Raw output of depth 9 has about 2 million faces: do not clean many in parallel.",
+ "params": {
+  "ref": {
+   "required": true,
+   "help": "reference png (RGBA or green screen)"
+  },
+  "out": {
+   "required": true,
+   "help": "output folder"
+  },
+  "depth": 9,
+  "seed": 7,
+  "steps": 50
+ },
+ "env": {
+  "PYTHONPATH": "{tripo_pkgs}",
+  "FORGE_SHAPE_PATHS": "{tripo_pkgs}",
+  "FORGE_SHAPE_NOFLASH": "1",
+  "FORGE_SHAPE_BACKEND": "triposg"
+ },
+ "cmd": [
+  "{py_comfy}",
+  "{runners}/triposg_shape.py",
+  "--ref",
+  "{ref}",
+  "--out",
+  "{out}",
+  "--depth",
+  "{depth}",
+  "--seed",
+  "{seed}",
+  "--steps",
+  "{steps}"
+ ]
+}

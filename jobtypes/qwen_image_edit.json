@@ -1,0 +1,57 @@
+{
+ "id": "qwen_image_edit",
+ "title": "Qwen-Image-Edit (ComfyUI, Nunchaku fp4)",
+ "group": "Images",
+ "klass": "gpu",
+ "model": "comfy-qwen-edit",
+ "est": {
+  "ram_gb": 36,
+  "vram_gb": 9,
+  "commit_gb": 32
+ },
+ "max_parallel": 1,
+ "notes": "RAM 35 GB working set measured by the lab on 2026-11-09 (ComfyUI loads the text encoder + DiT into RAM). VRAM is a guess until the first run is measured. Use --batch for many edits in ONE process.",
+ "params": {
+  "image": {
+   "required": true,
+   "help": "input picture"
+  },
+  "instruction": {
+   "required": true
+  },
+  "out": {
+   "required": true,
+   "help": "output png"
+  },
+  "image2": {
+   "help": "optional second picture"
+  },
+  "seed": 1,
+  "steps": 4,
+  "megapix": 1.0,
+  "batch": {
+   "help": "jobs.json: many edits in one process"
+  }
+ },
+ "cmd": [
+  "{py_comfy}",
+  "-I",
+  "{runners}/qwen_edit.py",
+  "--image",
+  "{image}",
+  "--image2",
+  "{image2}",
+  "--instruction",
+  "{instruction}",
+  "--out",
+  "{out}",
+  "--seed",
+  "{seed}",
+  "--steps",
+  "{steps}",
+  "--megapix",
+  "{megapix}",
+  "--batch",
+  "{batch}"
+ ]
+}

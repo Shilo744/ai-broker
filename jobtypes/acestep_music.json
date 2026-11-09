@@ -1,0 +1,27 @@
+{
+ "id": "acestep_music",
+ "title": "ACE-Step music (lab music_ace.py)",
+ "group": "Audio",
+ "klass": "gpu",
+ "model": "comfy-acestep",
+ "est": {
+  "ram_gb": 14,
+  "vram_gb": 8,
+  "commit_gb": 18
+ },
+ "max_parallel": 1,
+ "notes": "guess until measured",
+ "params": {
+  "script": "{lab}/tools/audio/music_ace.py",
+  "args": {
+   "default": [],
+   "help": "e.g. [60] seconds"
+  }
+ },
+ "cmd": [
+  "{py_comfy}",
+  "-I",
+  "{script}",
+  "{*args}"
+ ]
+}

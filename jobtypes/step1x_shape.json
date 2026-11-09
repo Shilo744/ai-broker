@@ -1,0 +1,37 @@
+{
+ "id": "step1x_shape",
+ "title": "Step1X-3D shape (lab script, jobs.json)",
+ "group": "3D",
+ "klass": "gpu",
+ "model": "step1x",
+ "est": {
+  "ram_gb": 10,
+  "vram_gb": 10,
+  "commit_gb": 16
+ },
+ "max_parallel": 1,
+ "notes": "Lab peak 2026-11-09: working set 9.3 GB, commit 15.6 GB (an earlier 36 GB reading was a logging bug). VRAM guess.",
+ "params": {
+  "jobs": {
+   "required": true,
+   "help": "jobs.json as the lab's part_shape_step1x.py expects"
+  },
+  "names": {
+   "default": [],
+   "help": "optional list of job names"
+  }
+ },
+ "env": {
+  "PYTHONPATH": "{tripo_pkgs}",
+  "FORGE_SHAPE_PATHS": "{tripo_pkgs}",
+  "FORGE_SHAPE_NOFLASH": "1",
+  "FORGE_SHAPE_BACKEND": "triposg"
+ },
+ "cmd": [
+  "{py_comfy}",
+  "-I",
+  "{lab}/modular/v3/part_shape_step1x.py",
+  "{jobs}",
+  "{*names}"
+ ]
+}
