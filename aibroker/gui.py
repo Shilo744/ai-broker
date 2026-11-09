@@ -650,7 +650,8 @@ class Main(W.QMainWindow):
         self.files.setMovement(W.QListView.Static)
         self.files.setWordWrap(True)
         self.files.setUniformItemSizes(True)
-        self.files.itemDoubleClicked.connect(lambda it: os.startfile(it.data(Qt.UserRole)))
+        self.files.itemDoubleClicked.connect(lambda it: os.startfile(it.data(Qt.UserRole)) if it.data(Qt.UserRole) != "__new__" else None)
+        self.files.itemClicked.connect(lambda it: self.open_submit(self.model_first_type()) if it.data(Qt.UserRole) == "__new__" else None)
         self.files.setContextMenuPolicy(Qt.CustomContextMenu)
         self.files.customContextMenuRequested.connect(self.files_menu)
         ol.addWidget(self.files, 1)
@@ -802,6 +803,7 @@ class Main(W.QMainWindow):
             r = self.api(dlg.request())
             if r and r.get("ok"):
                 self.statusBar().showMessage("נוספה עבודה מספר %d" % r["id"], 5000)
+                self.tabs.setCurrentIndex(0)
 
     def open_advanced(self):
         AdvancedDialog(self).exec()
@@ -916,6 +918,11 @@ class Main(W.QMainWindow):
         self.files_sig = sig
         self.files.setUpdatesEnabled(False)
         self.files.clear()
+        gcol = g["color"] if g else "#4f8cff"
+        new = W.QListWidgetItem(QtGui.QIcon(symbol_pixmap("+", gcol, 110)), ("יצירה חדשה" if g else "עבודה חדשה") + chr(10) + "לחץ כאן")
+        new.setData(Qt.UserRole, "__new__")
+        new.setToolTip("שלח עבודה חדשה במודל הזה (אפשר גם לגרור קובץ לחלון)")
+        self.files.addItem(new)
         for mt, size, fp in files:
             when = time.strftime("%d/%m %H:%M", time.localtime(mt))
             name = fp.name if len(fp.name) < 22 else fp.name[:19] + "…"
@@ -924,7 +931,7 @@ class Main(W.QMainWindow):
             it.setToolTip("%s\n%s" % (fp, fp.parent.name))
             self.files.addItem(it)
         self.files.setUpdatesEnabled(True)
-        self.files_empty.setText("עוד אין תוצאות לסוג הזה. כשעבודה תסתיים, הקבצים יופיעו כאן.")
+        self.files_empty.setText("עוד אין תוצאות. לחץ על ״+״ כדי ליצור, והקבצים יופיעו כאן כשהעבודה תסתיים.")
         self.files_empty.setVisible(not files)
         for i in range(1, self.model_list.count()):
             od = self.model_list.item(i).data(Qt.UserRole)
@@ -938,6 +945,8 @@ class Main(W.QMainWindow):
         if not it:
             return
         fp = it.data(Qt.UserRole)
+        if fp == "__new__":
+            return
         m = W.QMenu(self)
         m.addAction("פתח", lambda: os.startfile(fp))
         m.addAction("פתח את תיקיית העבודה", lambda: os.startfile(str(Path(fp).parent)))
