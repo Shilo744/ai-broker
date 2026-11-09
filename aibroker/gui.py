@@ -12,7 +12,7 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets as W
 from PySide6.QtCore import Qt
 
-from . import assistant, client, paths
+from . import assistant, client, paths, system
 
 QSS = """
 * { font-family: 'Segoe UI'; font-size: 11.5pt; color: #e6e8ee; }
@@ -74,6 +74,23 @@ def fmt_dur(s):
     return "%d:%02d:%02d" % (s // 3600, s % 3600 // 60, s % 60) if s >= 3600 else "%d:%02d" % (s // 60, s % 60)
 
 
+def fmt_limit(key, v):
+    v = int(round(v))
+    return str(v) if key == "max_jobs" else ("%d%%" % v if key == "disk_busy_pct" else "%d GB" % v)
+
+
+def eta_text(j):
+    """Plain-Hebrew estimate for a running job from the MEDIAN of earlier identical runs: seconds left, or 'longer than usual'."""
+    typ, n = j.get("typical_s"), j.get("typical_n", 0)
+    if not typ or j.get("state") not in ("running", "paused"):
+        return ""
+    left = typ - j.get("elapsed", 0)
+    basis = "חציון של %d ריצות" % n if n > 1 else "ריצה קודמת אחת"
+    if left > 0:
+        return "נשארו כ-%d שניות (%s)" % (round(left), basis) if left < 120 else "נשארו כ-%d דקות (%s)" % (round(left / 60), basis)
+    return "לוקח יותר מהרגיל (בדרך כלל %d שניות)" % round(typ)
+
+
 def fmt_size(n):
     return "%.1f MB" % (n / 1e6) if n >= 1e6 else "%d KB" % max(1, n // 1000)
 
@@ -82,12 +99,12 @@ def he_reason(r):
     if not r:
         return "מתחיל תיכף"
     table = (("RAM budget", "אין כרגע מספיק RAM פנוי לעבודה הזו"), ("VRAM budget", "ה-GPU עסוק, מחכה שיתפנה מקום"), ("free RAM", "ה-RAM של המחשב נמוך, מחכה"),
-             ("free commit", "ה-RAM של המחשב נמוך, מחכה"), ("paused", "הכול מושהה"), ("I am playing", "אתה משחק, עבודות GPU מחכות"), ("held", "עצרת אותה בעצמך"),
+             ("free commit", "ה-RAM של המחשב נמוך, מחכה"), ("paused", "הכול מושהה"), ("I am playing", "אתה משחק, עבודות GPU מחכות"), ("held by owner", "עצרת אותה בעצמך"),
              ("max concurrent", "כבר רצות הרבה עבודות במקביל"), ("another", "עבודה מאותו סוג כבר רצה"), ("GPU lock", "תוכנה אחרת משתמשת ב-GPU"),
              ("a self-locking", "מצלמים עכשיו את המשחק"), ("visual run", "עבודת GPU רצה עכשיו"), ("BRAKE", "המחשב בלחץ, עצרתי הכול"),
-             ("starvation", "העבודה הראשונה ממתינה הרבה זמן, אף אחת לא עוקפת אותה"), ("waiting for the job", "מחכה לעבודה אחרת"), ("backfill", "מחכה לעבודה שלפניה"))
+             ("disk busy", "הדיסק עסוק מדי, מחכה שיירגע"), ("starvation", "העבודה הראשונה ממתינה הרבה זמן, אף אחת לא עוקפת אותה"), ("waiting for the job", "מחכה לעבודה אחרת"), ("backfill", "מחכה לעבודה שלפניה"))
     for k, v in table:
-        if r.startswith(k) or k in r[:24]:
+        if r.startswith(k):
             return v
     return r
 
@@ -421,7 +438,46 @@ class SubmitDialog(W.QDialog):
         return req
 
 
+class ConnCheck(QtCore.QThread):
+    done = QtCore.Signal(object)
+
+    def run(self):
+        self.done.emit(system.claude_registered())
+
+
 class AdvancedDialog(W.QDialog):
+    def toggle_autostart(self, on):
+        ok = system.set_autostart(on)
+        if not ok and on:
+            W.QMessageBox.warning(self, "הפעלה עם Windows", "לא הצלחתי ליצור את הקיצור בתיקיית ההפעלה.")
+
+    def on_conn(self, state):
+        self.connected = state
+        self.conn_btn.setEnabled(state is not None)
+        if state is None:
+            self.conn_lbl.setText("לא הצלחתי לבדוק: הפקודה claude לא נמצאה.")
+        elif state:
+            self.conn_lbl.setText("מחובר: כל סשן חדש של Claude Code (גם של המשחק והמעבדה) רואה את הכלים של ה-broker ומריץ עבודות דרך התור.")
+            self.conn_btn.setText("נתק את Claude Code")
+        else:
+            self.conn_lbl.setText("לא מחובר. סוכנים של Claude Code עדיין יכולים להריץ עבודות כבדות בלי לעבור בתור.")
+            self.conn_btn.setText("חבר את Claude Code")
+
+    def toggle_connection(self):
+        if self.connected:
+            if W.QMessageBox.question(self, "ניתוק", "להסיר את החיבור של ה-broker מ-Claude Code?") != W.QMessageBox.Yes:
+                return
+            ok, msg = system.unregister_claude()
+        else:
+            if W.QMessageBox.question(self, "חיבור ל-Claude Code",
+                                      "זה יוסיף את הכלים של ה-broker להגדרות של Claude Code אצלך (לכל הפרויקטים) ויעתיק קובץ הוראות לסוכנים. אפשר לנתק בכל רגע. להמשיך?") != W.QMessageBox.Yes:
+                return
+            ok, msg = system.register_claude()
+        self.conn_lbl.setText(msg)
+        self.check = ConnCheck()
+        self.check.done.connect(self.on_conn)
+        self.check.start()
+
     def __init__(self, parent):
         super().__init__(parent)
         self.setWindowTitle("מתקדם")
@@ -435,6 +491,28 @@ class AdvancedDialog(W.QDialog):
             c.setChecked(bool(parent.state and parent.state["flags"].get(key)))
             c.toggled.connect(lambda on, k=key: parent.api({"op": "limits", "flags": {k: on}}))
             lay.addWidget(c)
+        self.auto = W.QCheckBox("להפעיל את התוכנה עם Windows (תעלה בשקט באזור ההודעות)")
+        self.auto.setChecked(system.autostart_enabled())
+        self.auto.toggled.connect(self.toggle_autostart)
+        lay.addWidget(self.auto)
+        h = W.QLabel("חיבור ל-Claude Code")
+        h.setObjectName("h2")
+        lay.addWidget(h)
+        self.conn_lbl = W.QLabel("בודק…")
+        self.conn_lbl.setObjectName("muted")
+        self.conn_lbl.setWordWrap(True)
+        lay.addWidget(self.conn_lbl)
+        crow = W.QHBoxLayout()
+        self.conn_btn = W.QPushButton("חבר את Claude Code")
+        self.conn_btn.setEnabled(False)
+        self.conn_btn.clicked.connect(self.toggle_connection)
+        crow.addWidget(self.conn_btn)
+        crow.addStretch(1)
+        lay.addLayout(crow)
+        self.connected = None
+        self.check = ConnCheck()
+        self.check.done.connect(self.on_conn)
+        self.check.start()
         h = W.QLabel("יומן")
         h.setObjectName("h2")
         lay.addWidget(h)
@@ -843,11 +921,18 @@ class ChatPanel(W.QFrame):
         if st in ("queued", "held"):
             a.text("ממתין בתור: " + ("עצרת אותה בעצמך" if st == "held" else he_reason(j.get("reason", ""))), muted=True)
         elif st in ("running", "paused"):
-            a.text("%s  %s   •   RAM %s" % ("עובד על זה" if st == "running" else "מוקפא", fmt_dur(j.get("elapsed", 0)), ltr("%.1f GB" % j.get("cur_ws", 0))))
+            a.text("%s   •   עברו %d שניות   •   RAM %s" % ("עובד על זה" if st == "running" else "מוקפא", j.get("elapsed", 0), ltr("%.1f GB" % j.get("cur_ws", 0))))
             pb = W.QProgressBar()
-            pb.setRange(0, 0)
             pb.setTextVisible(False)
             pb.setFixedHeight(5)
+            typ = j.get("typical_s")
+            if typ and st == "running":
+                pb.setRange(0, 100)
+                pb.setValue(min(95, int(100 * j.get("elapsed", 0) / typ)))
+                a.text(eta_text(j), muted=True)
+            else:
+                pb.setRange(0, 0)
+                a.text("עדיין אין נתונים על ריצות קודמות, אז אין הערכת זמן", muted=True)
             a.lay.addWidget(pb)
         elif st == "done":
             dur = (j.get("finished") or 0) - (j.get("started") or j.get("finished") or 0)
@@ -1343,7 +1428,7 @@ class Main(W.QMainWindow):
         t.setContentsMargins(0, 8, 0, 0)
         rl.addWidget(t)
         self.sl = {}
-        for key, label, lo, hi in (("ram_gb", "RAM ל-AI", 4, 62), ("vram_gb", "GPU ל-AI", 2, 16), ("max_jobs", "עבודות במקביל", 1, 8), ("reserve_ram_gb", "RAM שנשאר פנוי", 0, 24)):
+        for key, label, lo, hi in (("ram_gb", "RAM ל-AI", 4, 62), ("vram_gb", "GPU ל-AI", 2, 16), ("max_jobs", "עבודות במקביל", 1, 8), ("reserve_ram_gb", "RAM שנשאר פנוי", 0, 24), ("disk_busy_pct", "עומס דיסק מרבי", 50, 100)):
             row = W.QHBoxLayout()
             lab = W.QLabel(label)
             s = W.QSlider(Qt.Horizontal)
@@ -1352,7 +1437,7 @@ class Main(W.QMainWindow):
             val = W.QLabel("")
             val.setMinimumWidth(52)
             val.setStyleSheet("font-weight:600;")
-            s.valueChanged.connect(lambda x, l=val, k=key: l.setText(("%d GB" % x) if k != "max_jobs" else str(x)))
+            s.valueChanged.connect(lambda x, l=val, k=key: l.setText(fmt_limit(k, x)))
             s.sliderReleased.connect(lambda k=key, sl=s: self.set_limit(k, sl.value()))
             row.addWidget(lab, 2)
             row.addWidget(s, 3)
@@ -1771,7 +1856,7 @@ class Main(W.QMainWindow):
         for k, (sl, val) in self.sl.items():
             if not sl.isSliderDown():
                 sl.setValue(int(round(lim[k])))
-                val.setText(("%d GB" % lim[k]) if k != "max_jobs" else str(int(lim[k])))
+                val.setText(fmt_limit(k, lim[k]))
         self.building = False
         self.fill_queue(s)
         self.refresh_chat()
@@ -1805,7 +1890,8 @@ class Main(W.QMainWindow):
             sym, color, ttl = self.type_info(j["type"])
             st = "held" if j["state"] == "queued" and j.get("held") else ("paused" if j.get("suspended") else j["state"])
             if j["state"] in ("running", "paused"):
-                tm, ram, det = fmt_dur(j.get("elapsed", 0)), ltr("%.1f GB" % j.get("cur_ws", 0)), ltr("GPU %.1f GB" % j["cur_vram"]) if j.get("cur_vram") else ""
+                tm, ram = "%d שנ'" % j.get("elapsed", 0), ltr("%.1f GB" % j.get("cur_ws", 0))
+                det = eta_text(j) or (ltr("GPU %.1f GB" % j["cur_vram"]) if j.get("cur_vram") else "")
             else:
                 tm, ram, det = fmt_dur(time.time() - j["submitted"]), ltr("~%.0f GB" % j["est_ram"]), ("עצרת אותה בעצמך" if j.get("held") else he_reason(j.get("reason", "")))
             vals = [str(j["id"]), "%s  %s" % (sym, ttl), j["name"], j["requester"], STATE_HE.get(st, st), tm, ram, det]
@@ -1893,7 +1979,10 @@ def main(argv=None):
     if size:
         win.resize(*[int(x) for x in size.lower().split("x")])
     win.tabs.setCurrentIndex(tab)
-    win.show()
+    if "--hidden" in argv and win.tray:
+        pass                                    # started with Windows: stay in the tray, the service is running
+    else:
+        win.show()
     if "--assistant" in argv:
         QtCore.QTimer.singleShot(1200, win.open_claude)
     if shot:

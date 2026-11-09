@@ -72,6 +72,12 @@ class Store:
             q = "SELECT * FROM jobs WHERE state IN ('done','failed','cancelled','lost') ORDER BY finished DESC, id DESC LIMIT ?"
             return [self._row(r) for r in self.db.execute(q, (limit,)).fetchall()]
 
+    def durations(self, est_key, n=10):
+        """Seconds the last n successful runs of the same est_key took (newest first): the base of the 'about N seconds left' estimate."""
+        with self.lock:
+            q = "SELECT finished-started FROM jobs WHERE est_key=? AND state='done' AND started>0 AND finished>started ORDER BY id DESC LIMIT ?"
+            return [r[0] for r in self.db.execute(q, (est_key, n)).fetchall()]
+
     def next_pos(self):
         with self.lock:
             r = self.db.execute("SELECT MAX(pos) FROM jobs WHERE state='queued'").fetchone()

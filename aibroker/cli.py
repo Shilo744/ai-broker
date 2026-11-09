@@ -117,7 +117,7 @@ def cmd_move(a):
 
 
 LIMIT_KEYS = (("ram_gb", float), ("vram_gb", float), ("max_jobs", int), ("reserve_ram_gb", float), ("min_commit_free_gb", float),
-              ("hard_free_ram_gb", float), ("hard_commit_free_gb", float))
+              ("hard_free_ram_gb", float), ("hard_commit_free_gb", float), ("disk_busy_pct", float))
 
 
 def cmd_limits(a):

@@ -90,6 +90,16 @@ def test_starvation_guard():
     assert ids(r) == [] and "starvation" in r[1][2]
 
 
+def test_disk_gate():
+    run1 = dict(est_ram=7, est_vram=0, est_commit=9, cur_ws=6, cur_vram=0, cur_commit=8, type="x", model="x", klass="cpu", hold_lock=0, self_lock=0)
+    lim = dict(LIM, disk_busy_pct=85.0)
+    busy = dict(SYS, disk_avg=95.0)
+    assert ids(run([job(1, "a", 2)], running=[run1], sysinfo=busy, lim=lim)) == []          # a job runs and the disk is busy: wait
+    assert "disk busy" in run([job(1, "a", 2)], running=[run1], sysinfo=busy, lim=lim)[1][1]
+    assert ids(run([job(1, "a", 2)], running=[], sysinfo=busy, lim=lim)) == [1]              # nothing running: never block a lone job
+    assert ids(run([job(1, "a", 2)], running=[run1], sysinfo=dict(SYS, disk_avg=40.0), lim=lim)) == [1]
+
+
 def test_foreign_lock_and_self_lock():
     assert ids(run([job(1, "a", 5, 5)], lock="foreign")) == []
     g = job(2, "godot", 4, 3, self_lock=1, hold_lock=0)

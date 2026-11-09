@@ -2,6 +2,8 @@
 Owns the queue, starts jobs when the scheduler says they fit, measures them, keeps the legacy GPU lock, suspends under pressure.
 Start:  python -m aibroker.daemon      (or `aijob daemon start`)"""
 import collections
+import ctypes
+import statistics
 import re
 import shutil
 from pathlib import Path
@@ -19,6 +21,23 @@ import psutil
 from . import paths, scheduler, store as st, winutil as wu
 
 TERMINAL = ("done", "failed", "cancelled", "lost")
+
+
+class AdoptedProc:
+    """A job process started by an earlier broker. It is opened by pid, so its real exit code can still be read when it ends."""
+    def __init__(self, pid):
+        wu.k32.OpenProcess.restype = wu.wt.HANDLE
+        self._handle = wu.k32.OpenProcess(0x1000 | 0x100000 | 0x0001 | 0x0100, False, int(pid))     # query limited, synchronize, terminate, set quota
+        if not self._handle:
+            raise OSError("cannot open pid %d" % pid)
+        self.pid = int(pid)
+
+    def poll(self):
+        code = wu.wt.DWORD()
+        wu.k32.GetExitCodeProcess.argtypes = [wu.wt.HANDLE, ctypes.POINTER(wu.wt.DWORD)]
+        if not wu.k32.GetExitCodeProcess(self._handle, ctypes.byref(code)):
+            return None
+        return None if code.value == 259 else code.value
 
 
 class Live:
@@ -55,10 +74,64 @@ class Broker:
         self._smi = (0.0, 16.0, 0.0)
         self.stop = threading.Event()
         self.t_start = time.time()
-        # jobs that were running when the previous broker died: their exit code is unknown
+        self.disk_hist = collections.deque(maxlen=10)
+        self._typ_cache = {}
+        # jobs that were running when the previous broker stopped keep their place in the list: the process is found again by pid
         for j in self.store.by_state("running", "paused"):
-            self.store.update(j["id"], state="lost", finished=time.time(), note="broker restarted while the job ran; exit code unknown (process was left alone)")
+            if not self.adopt(j):
+                self.store.update(j["id"], state="lost", finished=time.time(), note="broker restarted while the job ran and the process could not be found again")
+        # the legacy GPU lock may be ours from the previous run (a restart must not turn it into a foreign lock that blocks every GPU job for 25 minutes)
+        lock = self.cfg["gpu_lock_path"]
+        if wu.lock_holder(lock).startswith("aibroker"):
+            if any((self.store.get(i) or {}).get("hold_lock") for i in self.live):
+                self.owns_lock = True
+            else:
+                wu.lock_release(lock)
         self.log("broker started (pid %d, port %d)" % (os.getpid(), paths.PORT))
+
+    def adopt(self, j):
+        try:
+            p = psutil.Process(j["pid"])
+            if abs(p.create_time() - (j["started"] or 0)) > 60:       # another process with a reused pid
+                return False
+            proc = AdoptedProc(j["pid"])
+            jo = wu.JobObject()
+            jo.assign(proc)                                           # best effort: lets the peak commit be measured again
+            fh = open(j["log"], "ab")
+            fh.write(b"\n[broker] service restarted; this job kept running and was picked up again\n")
+            fh.flush()
+            lv = Live(proc, jo, fh)
+            lv.t0 = j["started"] or time.time()
+            lv.peak_ws, lv.peak_vram = j["peak_ws"] or 0.0, j["peak_vram"] or 0.0
+            lv.suspended = p.status() == "stopped"
+            self.live[j["id"]] = lv
+            self.store.update(j["id"], state="paused" if lv.suspended else "running")
+            self.log("service restarted: job #%d is still running and was picked up again" % j["id"])
+            return True
+        except (psutil.Error, OSError, KeyError, TypeError):
+            return False
+
+    def _kill(self, lv):
+        """Terminate a job and everything it started (job object first, then the process tree: an adopted process may not be in our job object)."""
+        try:
+            lv.jobobj.terminate()
+        except Exception:
+            pass
+        for p in self._tree(lv.proc):
+            try:
+                p.kill()
+            except psutil.Error:
+                pass
+
+    def typical(self, est_key):
+        """(median seconds, number of runs) of the last successful runs of the same kind of job."""
+        c = self._typ_cache.get(est_key)
+        if c and time.time() - c[0] < 10:
+            return c[1]
+        ds = self.store.durations(est_key)
+        res = (statistics.median(ds), len(ds)) if ds else (None, 0)
+        self._typ_cache[est_key] = (time.time(), res)
+        return res
 
     # ------------------------------------------------------------ helpers
     def log(self, text):
@@ -202,7 +275,7 @@ class Broker:
                 lv = self.live[jid]
                 lv.cancel = True
                 self._unsuspend(lv)
-                lv.jobobj.terminate()
+                self._kill(lv)
             else:
                 raise ValueError("job #%d is already %s" % (jid, j["state"]))
             self.log("cancel #%d" % jid)
@@ -288,7 +361,9 @@ class Broker:
                 self._smi = r
                 self.gpu_total = r[1]
             self._smi_t = now
-        self.sys = dict(m, cpu=psutil.cpu_percent(None), disk=wu.disk_busy_pct(), gpu_used=self._smi[0], gpu_total=self._smi[1], gpu_util=self._smi[2], t=now)
+        disk = wu.disk_busy_pct()
+        self.disk_hist.append(disk)
+        self.sys = dict(m, cpu=psutil.cpu_percent(None), disk=disk, disk_avg=sum(self.disk_hist) / len(self.disk_hist), gpu_used=self._smi[0], gpu_total=self._smi[1], gpu_util=self._smi[2], t=now)
 
     def monitor(self):
         gpu = wu.gpu_process_mem()
@@ -309,7 +384,7 @@ class Broker:
             j = self.store.get(jid)
             if j and j["timeout_s"] and time.time() - lv.t0 > j["timeout_s"] and not lv.timed_out:
                 lv.timed_out = True
-                lv.jobobj.terminate()
+                self._kill(lv)
                 self.log("#%d killed: timeout %ds" % (jid, j["timeout_s"]))
 
     def finalize(self):
@@ -482,6 +557,7 @@ class Broker:
         d = {k: j[k] for k in ("id", "type", "name", "requester", "state", "model", "klass", "est_ram", "est_vram", "est_commit", "est_source", "held", "manual", "submitted",
                               "started", "finished", "rc", "peak_ws", "peak_commit", "peak_vram", "after_id", "note", "pid", "outdir", "params")}
         d["pos"] = j["pos"]
+        d["typical_s"], d["typical_n"] = self.typical(j["est_key"])
         if lv:
             d.update(cur_ws=round(lv.cur_ws, 2), cur_vram=round(lv.cur_vram, 2), elapsed=round(time.time() - lv.t0), suspended=lv.suspended)
         if j["state"] == "queued":
@@ -585,6 +661,9 @@ class Broker:
             return dict(ok=True, types=self.types, vars=c["vars"], output_root=c["output_root"])
         if op == "shutdown":
             self.log("shutdown requested")
+            if self.owns_lock and not any((self.store.get(i) or {}).get("hold_lock") for i in self.live):
+                wu.lock_release(self.cfg["gpu_lock_path"])
+                self.owns_lock = False
             self.stop.set()
             threading.Thread(target=lambda: (time.sleep(0.3), os._exit(0)), daemon=True).start()
             return dict(ok=True)

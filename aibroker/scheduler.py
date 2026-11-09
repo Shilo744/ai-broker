@@ -64,6 +64,8 @@ def plan(queued, running, limits, flags, sysinfo, lock, warm_models, cfg):
             why = "max concurrent jobs (%d)" % limits["max_jobs"]
         elif j.get("max_parallel") and sum(1 for r in run if r.get("type") == j["type"]) >= j["max_parallel"]:
             why = "another %s is running (max_parallel %d)" % (j["type"], j["max_parallel"])
+        elif run and sysinfo.get("disk_avg", 0.0) > limits.get("disk_busy_pct", 101.0):
+            why = "disk busy: %.0f%% (limit %.0f%%)" % (sysinfo["disk_avg"], limits["disk_busy_pct"])
         elif ram_used + j["est_ram"] > limits["ram_gb"] and run:
             why = "RAM budget: %.0f running + %.0f needed > %.0f limit" % (ram_used, j["est_ram"], limits["ram_gb"])
         elif gpu and vram_used + foreign_vram + j["est_vram"] > limits["vram_gb"] and (run or foreign_vram > 0):

@@ -25,6 +25,7 @@ DEFAULT_CONFIG = {
         "min_commit_free_gb": 20.0,  # free commit (RAM + pagefile) must stay above this after a start
         "hard_free_ram_gb": 2.5,     # safety brake: below this, nothing starts and the youngest job is suspended
         "hard_commit_free_gb": 8.0,
+        "disk_busy_pct": 85.0,       # while a job runs and the disk is busier than this (10 s average), no further job starts
     },
     "paused": False,
     "playing": False,
