@@ -17,7 +17,7 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 | 9 | Space planning (side panels and the empty queue take too much room) | [x] resource strip replaces the left column, narrow model list, queue collapses when empty; middle is about 82 percent of the width (live screenshot at the owner's window size) |
 | 10 | Settings (gear icon) instead of "Advanced", with a language choice | [x] `SettingsDialog` (General / Behavior / Claude / Log) |
 | 11 | English as a UI language | [x] 429 texts, LTR layout, job types in two languages; `tests/test_i18n.py`; checked in screenshots. The in-window Claude answers in the chosen language (not run end to end in English) |
-| 12 | GitHub documentation in English | [x] README.md (English), README.he.md, DESIGN.md updated, requirements.txt, screenshots. **Not pushed**: waiting for the owner's yes |
+| 12 | GitHub documentation in English | [x] README.md (English), README.he.md, DESIGN.md updated, requirements.txt, screenshots. pushed to GitHub on the owner's yes; no licence file yet (the owner asked why MIT, undecided) |
 | 13 | First-run setup wizard: pick model kinds, hardware check, recommended models, download, finish; connect Claude Code | [x] v1: wizard (3 pages), catalog of 8 packs (ACE-Step and Qwen-Image-Edit downloadable with verified checksums, the rest detected or handed to Claude), download job type with resume and checksum, MCP tools; tests pass. Not in v1: LLM, installing ComfyUI / Python environments, other people's job types |
 | 14 | A file that tracks what is done | [x] this file |
 | 15 | "Why does it wait for the GPU when 10 GB are free?" (job #48, 22:53) | [x] answered: the estimate was 13.6 GB (one earlier 12.4 GB peak + 10%) and only 10.0 GB were free (6.0 GB held by other programs); even the typical 10.45 GB peak did not fit by 0.45 GB. Fixed: the waiting text shows the numbers and the biggest GPU users, "Run anyway" button / menu / `aijob force`, VRAM estimate no longer decided by one outlier; scheduler tests 16, `tests/e2e_force.py` 7/7 |
@@ -33,7 +33,7 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 - `gpu_hogs` (names of the programs holding GPU memory) returned an empty list when the GPU was idle; it has not been seen with a real program holding memory. "Run anyway" has not been seen in the live window (no job was waiting).
 - English: the UI texts are complete by the checker, but only four pages were looked at in screenshots; some alignments may be slightly off in left-to-right mode.
 - Setup: only two packs can be downloaded automatically (ACE-Step, Qwen-Image-Edit), both already installed on the author's computer; no LLM packs; no installation of ComfyUI or Python environments.
-- GitHub: 15 local commits are not pushed; no licence chosen.
+- GitHub: everything is pushed; the repository has no licence file yet (the owner decides: MIT is the suggested default).
 
 ## Not verified yet (say so to the owner)
 - The owner's window and service were restarted with the latest code at the end of the session (setup wizard, cog icon, clickable permission cards). Everything after that is only in the repository.
@@ -45,4 +45,4 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 - Permission levels: `careful`, `normal` (default), `free`; blocked actions at every level.
 - Language is saved in the broker's `config.json` (`lang`) and a change reopens the window. Hebrew is the source language of the code strings.
 - Wizard downloads will be jobs in the same queue, from pinned official URLs with checksums, only after the owner ticks them.
-- The license of the repository is not chosen: the owner decides (suggested default MIT).
+- The license of the repository is not chosen: the owner decides (suggested default MIT; Apache-2.0 if he wants an explicit patent grant). Do not add a LICENSE file before he answers.
