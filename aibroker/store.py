@@ -9,7 +9,7 @@ from . import paths
 
 COLS = ["id", "type", "name", "requester", "state", "pos", "manual", "held", "params", "cmd", "cwd", "env", "model", "klass", "est_key",
         "est_ram", "est_vram", "est_commit", "est_source", "max_parallel", "hold_lock", "self_lock", "after_id", "timeout_s",
-        "submitted", "started", "finished", "rc", "pid", "peak_ws", "peak_commit", "peak_vram", "avail_before", "log", "note"]
+        "submitted", "started", "finished", "rc", "pid", "peak_ws", "peak_commit", "peak_vram", "avail_before", "log", "note", "outdir"]
 JSON_COLS = ("params", "cmd", "env")
 
 SCHEMA = """
@@ -28,6 +28,10 @@ class Store:
         self.db = sqlite3.connect(str(path or paths.DB), check_same_thread=False, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        try:
+            self.db.execute("ALTER TABLE jobs ADD COLUMN outdir TEXT")
+        except sqlite3.OperationalError:
+            pass
         self.lock = threading.RLock()
 
     @staticmethod
@@ -133,13 +137,17 @@ def render(value, ctx):
     return re.sub(r"\{(\w+)\}", lambda m: str(ctx[m.group(1)]) if m.group(1) in ctx else m.group(0), value)
 
 
-def resolve_command(t, params, cfgvars):
+def resolve_command(t, params, cfgvars, extra=None):
     """Merge defaults and user params, check required ones, expand the cmd template. A '{*extra}' element expands to params['extra'] (list).
     An element whose placeholder has no value (optional parameter) is dropped together with a preceding '--flag' element."""
     spec = t.get("params", {})
     full = {}
+    base = dict(cfgvars)
+    base.update(extra or {})                       # e.g. {outdir}: the job's own output folder
     for k, v in spec.items():
         d = v.get("default") if isinstance(v, dict) else v
+        if isinstance(d, str):
+            d = render(d, base)
         req = isinstance(v, dict) and v.get("required")
         if k in params and params[k] not in (None, ""):
             full[k] = params[k]
@@ -149,7 +157,15 @@ def resolve_command(t, params, cfgvars):
             raise ValueError("missing parameter '%s' for type %s" % (k, t["id"]))
     for k, v in params.items():
         full.setdefault(k, v)
-    ctx = dict(cfgvars)
+
+    def _r(v):                                      # {outdir} (and path variables) may also appear in values the requester passes
+        if isinstance(v, str):
+            return render(v, base)
+        if isinstance(v, list):
+            return [_r(x) for x in v]
+        return v
+    full = {k: _r(v) for k, v in full.items()}
+    ctx = dict(base)
     ctx.update({k: v for k, v in full.items()})
     cmd = []
     for part in t["cmd"]:

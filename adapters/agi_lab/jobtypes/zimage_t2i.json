@@ -16,7 +16,8 @@
    "required": true
   },
   "out": {
-   "required": true
+   "default": "{outdir}/image.png",
+   "help": "output png (default: the job's own output folder)"
   },
   "w": 832,
   "h": 1216,
@@ -44,5 +45,6 @@
  "color": "#e0679c",
  "he_title": "יצירת תמונה מטקסט",
  "he_desc": "מצייר תמונה חדשה מתיאור במילים",
- "he_group": "תמונות"
+ "he_group": "תמונות",
+ "output_dir": "zimage"
 }

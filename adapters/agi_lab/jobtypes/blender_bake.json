@@ -18,7 +18,8 @@
    "required": true
   },
   "outdir": {
-   "required": true
+   "default": "{outdir}",
+   "help": "output folder (default: the job's own output folder)"
   },
   "res": 2048,
   "script": "{lab}/modular/v3/part_bake.py",
@@ -41,5 +42,6 @@
  "color": "#d9822b",
  "he_title": "אפיית פרטים לדגם",
  "he_desc": "מעביר פרטים מדגם כבד לדגם קל (Blender)",
- "he_group": "תלת-ממד"
+ "he_group": "תלת-ממד",
+ "output_dir": "blender_bake"
 }

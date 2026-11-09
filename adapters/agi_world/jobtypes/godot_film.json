@@ -33,5 +33,6 @@
  "color": "#c0392b",
  "he_title": "סרטון מהמשחק",
  "he_desc": "מצלם סרטון קצר מהמשחק",
- "he_group": "המשחק"
+ "he_group": "המשחק",
+ "output_dir": "godot_test"
 }

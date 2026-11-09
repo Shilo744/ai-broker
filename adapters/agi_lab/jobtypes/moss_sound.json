@@ -29,5 +29,6 @@
  "color": "#c9a227",
  "he_title": "יצירת צלילים",
  "he_desc": "אפקטים וקולות (MOSS)",
- "he_group": "שמע"
+ "he_group": "שמע",
+ "output_dir": "sound"
 }

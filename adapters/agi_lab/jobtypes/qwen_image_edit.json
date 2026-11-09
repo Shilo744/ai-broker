@@ -20,8 +20,8 @@
    "required": true
   },
   "out": {
-   "required": true,
-   "help": "output png"
+   "default": "{outdir}/edited.png",
+   "help": "output png (default: the job's own output folder)"
   },
   "image2": {
    "help": "optional second picture"
@@ -58,5 +58,6 @@
  "color": "#8e6bd6",
  "he_title": "עריכת תמונה",
  "he_desc": "משנה תמונה קיימת לפי הוראה במילים",
- "he_group": "תמונות"
+ "he_group": "תמונות",
+ "output_dir": "qwen_edit"
 }

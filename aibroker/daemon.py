@@ -2,6 +2,9 @@
 Owns the queue, starts jobs when the scheduler says they fit, measures them, keeps the legacy GPU lock, suspends under pressure.
 Start:  python -m aibroker.daemon      (or `aijob daemon start`)"""
 import collections
+import re
+import shutil
+from pathlib import Path
 import json
 import os
 import socketserver
@@ -86,7 +89,9 @@ class Broker:
                 if not req.get("cmd"):
                     raise ValueError("custom job needs a command (aijob submit custom -- <command...>)")
                 params["extra"] = [str(x) for x in req["cmd"]]
-            full, cmd, env, est_key = st.resolve_command(t, params, self.cfg["vars"])
+            outdir = self.make_outdir(t, req.get("name") or params.get("name") or t.get("title", t["id"]))
+            full, cmd, env, est_key = st.resolve_command(t, params, self.cfg["vars"], {"outdir": outdir.replace("\\", "/")})
+            env["AIBROKER_OUTDIR"] = outdir
             default = dict(ram_gb=2.0, vram_gb=0.0, commit_gb=3.0)
             default.update(t.get("est") or {})
             est = st.learned_estimate(self.store, est_key, default)
@@ -111,13 +116,25 @@ class Broker:
                        est_source=est["source"], max_parallel=int(t.get("max_parallel", 0) or 0),
                        hold_lock=1 if (klass == "gpu" and not t.get("self_lock")) else 0, self_lock=1 if t.get("self_lock") else 0,
                        after_id=int(after) if after is not None else None, timeout_s=int(req.get("timeout_s") or t.get("timeout_s") or 0),
-                       submitted=time.time(), peak_ws=0, peak_commit=0, peak_vram=0, log="")
+                       submitted=time.time(), peak_ws=0, peak_commit=0, peak_vram=0, log="", outdir=outdir)
             jid = self.store.add(job)
             self.store.update(jid, log=str(paths.LOGS / ("%d.log" % jid)))
             if req.get("next"):
                 self.move([jid], "top")
             self.log("submitted #%d %s by %s (est RAM %.1f GB, VRAM %.1f GB, %s)" % (jid, name, job["requester"], job["est_ram"], job["est_vram"], est["source"]))
             return jid
+
+    def make_outdir(self, t, name):
+        """Every model type has its OWN folder: <output_root>/<type output_dir>/<date>_<time>_<job name>/ (created here, always)."""
+        root = Path(self.cfg["output_root"]) / (t.get("output_dir") or t["id"])
+        slug = re.sub(r"[^A-Za-z0-9\-]+", "_", str(name)).strip("_")[:40] or "job"      # ASCII only: some tools (cv2 and friends) cannot open non-ASCII paths on Windows
+        base = root / ("%s_%s" % (time.strftime("%Y-%m-%d_%H%M%S"), slug))
+        d, n = base, 1
+        while d.exists():
+            n += 1
+            d = Path("%s-%d" % (base, n))
+        d.mkdir(parents=True, exist_ok=True)
+        return str(d)
 
     # ------------------------------------------------------------ queue ops
     def move(self, ids, to):
@@ -265,6 +282,7 @@ class Broker:
             except Exception:
                 pass
             lv.jobobj.close()
+            self.write_result(j, state, rc, secs, lv.peak_ws, peak_c, lv.peak_vram)
             del self.live[jid]
             self.finished_models[j["model"]] = time.time()
             self.hist_rev += 1
@@ -278,6 +296,20 @@ class Broker:
             self.owns_lock = False
         elif self.owns_lock:
             wu.lock_touch(self.cfg["gpu_lock_path"])
+
+    def write_result(self, j, state, rc, secs, ws, commit, vram):
+        """result.json + a copy of the log inside the job's output folder (the record of what produced the files)."""
+        try:
+            d = Path(j["outdir"] or "")
+            if not d.is_dir():
+                return
+            info = dict(job_id=j["id"], name=j["name"], type=j["type"], requester=j["requester"], state=state, exit_code=rc, seconds=round(secs, 1),
+                        peak_ram_gb=round(ws, 2), peak_commit_gb=round(commit, 2), peak_vram_gb=round(vram, 2), command=j["cmd"], finished=time.strftime("%Y-%m-%d %H:%M:%S"))
+            (d / "result.json").write_text(json.dumps(info, indent=1, ensure_ascii=False), encoding="utf-8")
+            if j.get("log") and os.path.exists(j["log"]):
+                shutil.copyfile(j["log"], d / "job.log")
+        except OSError:
+            pass
 
     def apply_suspensions(self):
         c = self.cfg
@@ -398,7 +430,7 @@ class Broker:
     def job_view(self, j):
         lv = self.live.get(j["id"])
         d = {k: j[k] for k in ("id", "type", "name", "requester", "state", "model", "klass", "est_ram", "est_vram", "est_commit", "est_source", "held", "manual", "submitted",
-                              "started", "finished", "rc", "peak_ws", "peak_commit", "peak_vram", "after_id", "note", "pid")}
+                              "started", "finished", "rc", "peak_ws", "peak_commit", "peak_vram", "after_id", "note", "pid", "outdir")}
         d["pos"] = j["pos"]
         if lv:
             d.update(cur_ws=round(lv.cur_ws, 2), cur_vram=round(lv.cur_vram, 2), elapsed=round(time.time() - lv.t0), suspended=lv.suspended)
@@ -495,7 +527,7 @@ class Broker:
             return dict(ok=True, text=self.tail(int(req["id"]), int(req.get("bytes", 20000))))
         if op == "types":
             self.types = st.load_types()
-            return dict(ok=True, types=self.types, vars=c["vars"])
+            return dict(ok=True, types=self.types, vars=c["vars"], output_root=c["output_root"])
         if op == "shutdown":
             self.log("shutdown requested")
             self.stop.set()

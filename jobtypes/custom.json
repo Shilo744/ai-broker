@@ -16,5 +16,6 @@
  "color": "#78909c",
  "he_title": "פקודה אחרת",
  "he_desc": "כל תוכנה שתכתוב לה פקודה",
- "he_group": "אחר"
+ "he_group": "אחר",
+ "output_dir": "other"
 }

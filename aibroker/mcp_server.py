@@ -13,6 +13,7 @@ INSTRUCTIONS = """AI Broker is the ONE entry point for heavy local AI/GPU work o
 TripoSG/Step1X 3D shapes, Blender cleaning and baking, music/sound models, hidden Godot test runs). NEVER start such a job directly in a shell:
 queue it with submit_job. The broker fits as many jobs at once as the RAM/VRAM limits allow, learns real memory use from history, groups jobs
 that use the same model, and pauses everything when the owner is playing or recording.
+Every job gets its OWN output folder (<output_root>/<model type>/<date>_<name>/): you normally do not pass any output path; job_status returns `outdir` and `output_files`.
 Workflow: list_job_types (first time) -> submit_job -> keep working on something else -> wait_for_job (short timeout, repeat) or run
 `aijob wait <id>` as a BACKGROUND shell command to be woken when it ends -> read the result with job_status / job_output.
 Small light commands (a quick script, a git command) do NOT belong here. Do not change limits or pause the queue unless the owner asked."""
@@ -31,7 +32,7 @@ def _call(req, start=False, timeout=15.0):
 
 def _brief(j: dict) -> dict:
     keys = ("id", "state", "name", "type", "requester", "est_ram", "est_vram", "est_source", "reason", "elapsed", "cur_ws", "cur_vram", "rc", "peak_ws", "peak_commit",
-            "peak_vram", "note")
+            "peak_vram", "note", "outdir")
     out = {k: j[k] for k in keys if k in j and j[k] not in (None, "")}
     if j.get("finished") and j.get("started"):
         out["seconds"] = round(j["finished"] - j["started"], 1)
@@ -58,7 +59,7 @@ def list_job_types() -> dict:
 @mcp.tool()
 def submit_job(
     job_type: Annotated[str, Field(description="A type id from list_job_types, e.g. 'triposg_shape', 'qwen_image_edit', 'blender_script', or 'custom' for any command.")],
-    params: Annotated[dict[str, Any] | None, Field(description="Parameters of that type (see list_job_types). Paths must be absolute. Lists are JSON lists.")] = None,
+    params: Annotated[dict[str, Any] | None, Field(description="Parameters of that type (see list_job_types). Input paths must be absolute. Output paths are optional: by default results go to the job's own output folder (returned as outdir). Lists are JSON lists.")] = None,
     name: Annotated[str | None, Field(description="Short human name shown to the owner in the queue, e.g. 'coat shape depth 9'.")] = None,
     requester: Annotated[str | None, Field(description="Who is asking (your agent/session name), shown to the owner.")] = None,
     est_ram_gb: Annotated[float | None, Field(description="Only if you KNOW the peak RAM in GB (otherwise leave empty: the broker uses measured history). REQUIRED for 'custom'.")] = None,
@@ -105,6 +106,15 @@ def job_status(job_id: Annotated[int, Field(description="Job id returned by subm
     if not r.get("ok"):
         return r
     out = {"ok": True, "job": _brief(r["job"])}
+    d = r["job"].get("outdir")
+    if d and os.path.isdir(d) and r["job"]["state"] in ("done", "failed"):
+        files = []
+        for root, _dirs, names in os.walk(d):
+            for n in names:
+                if n not in ("job.log", "result.json"):
+                    fp = os.path.join(root, n)
+                    files.append({"path": fp.replace("\\", "/"), "mb": round(os.path.getsize(fp) / 1e6, 2)})
+        out["output_files"] = files[:40]
     if output_tail_chars:
         out["output_tail"] = (_call({"op": "tail", "id": job_id, "bytes": output_tail_chars}) or {}).get("text", "")
     return out

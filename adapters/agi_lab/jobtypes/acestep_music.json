@@ -28,5 +28,9 @@
  "color": "#43a047",
  "he_title": "יצירת מוזיקה",
  "he_desc": "מלחין מוזיקה (ACE-Step)",
- "he_group": "שמע"
+ "he_group": "שמע",
+ "output_dir": "music",
+ "env": {
+  "LAB_AUDIO_OUT": "{outdir}"
+ }
 }

@@ -34,5 +34,6 @@
  "color": "#d84a4a",
  "he_title": "צילומי מסך מהמשחק",
  "he_desc": "מריץ את המשחק ברקע ומצלם",
- "he_group": "המשחק"
+ "he_group": "המשחק",
+ "output_dir": "godot_test"
 }

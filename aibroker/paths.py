@@ -40,6 +40,7 @@ DEFAULT_CONFIG = {
     "gpu_lock_path": GAMES + "/Assets/3D maker/characters/.gpu.lock",
     "toast": False,
     "history_keep": 500,
+    "output_root": str(ROOT / "output").replace("\\", "/"),   # every model type gets its own folder under here
     "vars": {                         # {name} placeholders in jobtypes/*.json cmd templates
         "py_comfy": "C:/Migrated/AI/ComfyUI-Easy-Install/python_embeded/python.exe",
         "py_venv": str(VENV_PY).replace("\\", "/"),

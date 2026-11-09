@@ -28,5 +28,6 @@
  "color": "#607d8b",
  "he_title": "בדיקת משחק בלי מסך",
  "he_desc": "בדיקת לוגיקה של המשחק, קלה",
- "he_group": "המשחק"
+ "he_group": "המשחק",
+ "output_dir": "godot_test"
 }

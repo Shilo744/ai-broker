@@ -35,5 +35,6 @@
  "color": "#e87d0d",
  "he_title": "עבודת Blender",
  "he_desc": "מריץ סקריפט בתוכנת Blender",
- "he_group": "תלת-ממד"
+ "he_group": "תלת-ממד",
+ "output_dir": "blender"
 }
