@@ -23,11 +23,11 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 
 ## Done (checked)
 - Tests never touch the owner's data (`tests/sandbox.py`).
-- Permission classifier: 66 unit checks. Translation table: `tools/i18n_tool.py check` and `tests/test_i18n.py`. Scheduler: 13 tests. UI smoke test: 15 checks.
+- Permission classifier: 68 unit checks. Translation table: `tools/i18n_tool.py check` and `tests/test_i18n.py`. Scheduler: 13 tests. UI smoke test: 15 checks.
 - Real Claude (`claude -p --permission-prompt-tool`) answered or held a permission request inside the same turn: approve writes the file, decline does not, a read-only command at level "normal" runs silently, at level "careful" it asks.
 
 ## Not verified yet (say so to the owner)
-- The window the owner has open still runs the version before the English UI and the settings dialog (needs a restart of the window and the service; the owner's window and service were last restarted before these two commits).
+- The owner's window and service were restarted with the latest code at the end of the session (setup wizard, cog icon, clickable permission cards). Everything after that is only in the repository.
 - A real Claude turn in English through the window; a real login autostart; macOS / Linux (Windows only).
 - The wizard has run end to end only against a local fake server and in the sandbox; no real model was downloaded from the internet by the setup (the three installed packs on the author's computer were detected as installed). The first real download will be the owner's own click.
 
