@@ -367,7 +367,34 @@ class Broker:
             self._smi_t = now
         disk = wu.disk_busy_pct()
         self.disk_hist.append(disk)
-        self.sys = dict(m, cpu=psutil.cpu_percent(None), disk=disk, disk_avg=sum(self.disk_hist) / len(self.disk_hist), gpu_used=self._smi[0], gpu_total=self._smi[1], gpu_util=self._smi[2], t=now)
+        self.sys = dict(m, cpu=psutil.cpu_percent(None), disk=disk, disk_avg=sum(self.disk_hist) / len(self.disk_hist), gpu_used=self._smi[0], gpu_total=self._smi[1], gpu_util=self._smi[2], t=now,
+                        gpu_hogs=self.gpu_hogs(now))
+
+    def gpu_hogs(self, now):
+        """Which OTHER programs hold GPU memory right now (name, GB), biggest first, so a waiting job can say who is in its way. Sampled every 2 s."""
+        if now - getattr(self, "_hog_t", 0.0) < 2.0:
+            return getattr(self, "_hogs", [])
+        self._hog_t = now
+        mine = set()
+        for lv in self.live.values():
+            try:
+                mine.update(p.pid for p in self._tree(lv.proc))
+            except psutil.Error:
+                pass
+        by_name = {}
+        try:
+            for pid, b in wu.gpu_process_mem().items():
+                if pid in mine or b < 0.3 * wu.GB:
+                    continue
+                try:
+                    name = psutil.Process(pid).name()
+                except psutil.Error:
+                    name = "pid %d" % pid
+                by_name[name] = by_name.get(name, 0.0) + b / wu.GB
+        except Exception:
+            pass
+        self._hogs = sorted(by_name.items(), key=lambda kv: -kv[1])[:4]
+        return self._hogs
 
     def monitor(self):
         gpu = wu.gpu_process_mem()
@@ -702,6 +729,16 @@ class Broker:
                 return dict(ok=True, jobs=[self.job_view(j) for j in self.store.finished(int(req.get("limit", 200)))])
         if op == "move":
             self.move([int(i) for i in req["ids"]], req["to"])
+            return dict(ok=True)
+        if op == "force_start":
+            jid = int(req["id"])
+            with self.lock:
+                j = self.store.get(jid)
+                if not j or j["state"] != "queued":
+                    return dict(ok=False, error="job #%d is not waiting" % jid)
+                self.move([jid], "top")
+                self.store.update(jid, manual=2)                   # 2 = "run anyway": the scheduler skips the soft budgets for this job
+            self.log("owner: run #%d anyway (RAM / GPU budgets skipped, the brake and the pause stay)" % jid)
             return dict(ok=True)
         if op == "type_stats":
             with self.lock:

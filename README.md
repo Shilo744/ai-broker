@@ -109,7 +109,7 @@ Environment variables: `AIBROKER_HOME` (data folder), `AIBROKER_PORT` (default 4
 
 ## How scheduling works
 
-Every second the broker walks the queue in order and starts a job when all of these hold: it is not paused or held, the GPU is not in "playing" mode, the sum of running jobs (the larger of the estimate and the live measurement) plus this job fits the RAM and VRAM budgets, free RAM and commit stay above the reserve, the disk is not saturated, and the number of parallel jobs is not exceeded. Jobs of an already loaded model are lifted ahead of others (never past a job that has waited too long). More in [DESIGN.md](DESIGN.md).
+Every second the broker walks the queue in order and starts a job when all of these hold: it is not paused or held, the GPU is not in "playing" mode, the sum of running jobs (the larger of the estimate and the live measurement) plus this job fits the RAM and VRAM budgets, free RAM and commit stay above the reserve, the disk is not saturated, and the number of parallel jobs is not exceeded. Jobs of an already loaded model are lifted ahead of others (never past a job that has waited too long). A waiting job says why with numbers ("needs about 11.5 GB, only 10.0 GB of 16 is free, other programs hold 6.0 GB (python.exe 3.2 GB, chrome.exe 2.1 GB)"), and **Run anyway** (button, right-click, or `aijob force <id>`) starts it now, skipping the RAM and GPU budgets (never the safety brake, "Pause all", "I am playing" or a hold). More in [DESIGN.md](DESIGN.md).
 
 ## Project layout
 
@@ -120,7 +120,7 @@ Every second the broker walks the queue in order and starts a job when all of th
 | `runners/` | small scripts that run a model |
 | `skill/` | instructions for agents (`SKILL.md`) and the assistant prompt |
 | `catalog/` | model packs of the setup (JSON: files with official URL, size and SHA-256, hardware needs, licence) |
-| `tests/` | `test_scheduler.py`, `test_permissions.py`, `test_i18n.py`, `test_catalog.py`, `test_download.py`, `ui_smoke.py`, `e2e_approval.py`, `e2e_setup.py`, `e2e_wizard.py` |
+| `tests/` | `test_scheduler.py`, `test_permissions.py`, `test_i18n.py`, `test_catalog.py`, `test_download.py`, `ui_smoke.py`, `e2e_approval.py`, `e2e_setup.py`, `e2e_wizard.py`, `e2e_force.py` |
 | `docs/` | model notes, test report, progress tracker |
 
 ## Development

@@ -499,6 +499,14 @@ EN.update({
     'תמונות': 'Images',
 })
 
+EN.update({
+    'אין מספיק זיכרון GPU פנוי: העבודה צריכה כ-%s, ופנוי רק %s מתוך %s. תוכנות אחרות תופסות %s%s.': 'Not enough free GPU memory: the job needs about %s, and only %s of %s is free. Other programs hold %s%s.',
+    ' (%s)': ' (%s)',
+    'אין מספיק RAM לעבודה הזו: עבודות אחרות תופסות %s, והיא צריכה כ-%s (המגבלה %s).': 'Not enough RAM for this job: other jobs hold %s, and it needs about %s (the limit is %s).',
+    'הרץ בכל זאת': 'Run anyway',
+    'מתעלם מהמגבלות של RAM ו-GPU (לא מהבלם ולא מ״עצור הכול״). ייתכן שהעבודה תרוץ לאט יותר.': 'Ignores the RAM and GPU limits (not the safety brake and not "Pause all"). The job may run more slowly.',
+})
+
 # a word that means two things in Hebrew: T(word, context) looks here first
 EN_CTX = {
     ("btn", "עצור"): "Stop",

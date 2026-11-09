@@ -20,6 +20,7 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 | 12 | GitHub documentation in English | [x] README.md (English), README.he.md, DESIGN.md updated, requirements.txt, screenshots. **Not pushed**: waiting for the owner's yes |
 | 13 | First-run setup wizard: pick model kinds, hardware check, recommended models, download, finish; connect Claude Code | [x] v1: wizard (3 pages), catalog of 8 packs (ACE-Step and Qwen-Image-Edit downloadable with verified checksums, the rest detected or handed to Claude), download job type with resume and checksum, MCP tools; tests pass. Not in v1: LLM, installing ComfyUI / Python environments, other people's job types |
 | 14 | A file that tracks what is done | [x] this file |
+| 15 | "Why does it wait for the GPU when 10 GB are free?" (job #48, 22:53) | [x] answered: the estimate was 13.6 GB (one earlier 12.4 GB peak + 10%) and only 10.0 GB were free (6.0 GB held by other programs); even the typical 10.45 GB peak did not fit by 0.45 GB. Fixed: the waiting text shows the numbers and the biggest GPU users, "Run anyway" button / menu / `aijob force`, VRAM estimate no longer decided by one outlier; scheduler tests 16, `tests/e2e_force.py` 7/7 |
 
 ## Done (checked)
 - Tests never touch the owner's data (`tests/sandbox.py`).

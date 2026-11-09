@@ -194,7 +194,7 @@ def main(argv=None):
     p.add_argument("ids", nargs="+", type=int)
     p.add_argument("--to", required=True)
     p.set_defaults(f=cmd_move)
-    for name, op, hlp in (("cancel", "cancel", "cancel a job (kills it if running)"), ("hold", "job_pause", "pause one queued/running job"),
+    for name, op, hlp in (("force", "force_start", "run a waiting job NOW, skipping the RAM / GPU budgets (the brake and the pause stay)"), ("cancel", "cancel", "cancel a job (kills it if running)"), ("hold", "job_pause", "pause one queued/running job"),
                           ("release", "job_resume", "resume one held job")):
         p = sp.add_parser(name, help=hlp)
         p.add_argument("id", type=int)

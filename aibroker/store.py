@@ -2,6 +2,7 @@
 import json
 import re
 import sqlite3
+import statistics
 import threading
 import time
 
@@ -114,19 +115,25 @@ class Store:
                             "(SELECT id FROM jobs WHERE state IN ('done','failed','cancelled','lost') ORDER BY id DESC LIMIT ?)", (keep,))
 
 
+def _p75(vals):
+    v = sorted(vals)
+    return v[min(len(v) - 1, int(round(0.75 * (len(v) - 1))))] if v else 0.0
+
+
 def _p90(vals):
     vals = sorted(vals)
     return vals[min(len(vals) - 1, int(round(0.9 * (len(vals) - 1))))]
 
 
 def learned_estimate(store, est_key, default):
-    """Estimate = 1.1 x 90th percentile of the last 10 successful runs; falls back to the type default."""
+    """Estimate = 1.1 x 90th percentile of the last 10 successful runs (RAM, commit); VRAM = the larger of 1.1 x median and the 75th percentile. Falls back to the type default."""
     h = store.history(est_key)
     if not h:
         return dict(default, source="default (not measured yet)")
     ram = _p90([x["peak_ws"] for x in h]) * 1.1
     com = _p90([x["peak_commit"] or 0 for x in h]) * 1.1
-    vr = _p90([x["peak_vram"] or 0 for x in h]) * 1.1
+    vp = [x["peak_vram"] or 0 for x in h]
+    vr = max(statistics.median(vp) * 1.1, _p75(vp))            # VRAM use of ComfyUI-like jobs adapts to what is free: one big peak must not decide (RAM and commit keep the 90th percentile)
     return {"ram_gb": round(max(ram, 0.3), 2), "commit_gb": round(max(com, ram), 2),
             "vram_gb": round(vr if vr > 0.05 else default.get("vram_gb", 0.0), 2),
             "source": "learned from %d run%s" % (len(h), "" if len(h) == 1 else "s")}

@@ -71,6 +71,15 @@ def loc(t, field, default=""):
 def he_reason(r):
     if not r:
         return T("מתחיל תיכף")
+    m = re.match(r"VRAM budget: ([\d.]+) GB used by jobs, ([\d.]+) GB by other programs(?: \((.*?)\))? \+ ([\d.]+) GB needed > ([\d.]+) GB limit", r)
+    if m:
+        used, other, hogs, need, limit = float(m.group(1)), float(m.group(2)), m.group(3) or "", float(m.group(4)), float(m.group(5))
+        free = max(0.0, limit - used - other)
+        who = (T(" (%s)") % hogs) if hogs else ""
+        return T("אין מספיק זיכרון GPU פנוי: העבודה צריכה כ-%s, ופנוי רק %s מתוך %s. תוכנות אחרות תופסות %s%s.") % (ltr("%.1f GB" % need), ltr("%.1f GB" % free), ltr("%.0f GB" % limit), ltr("%.1f GB" % other), who)
+    m = re.match(r"RAM budget: ([\d.]+) GB running \+ ([\d.]+) GB needed > ([\d.]+) GB limit", r)
+    if m:
+        return T("אין מספיק RAM לעבודה הזו: עבודות אחרות תופסות %s, והיא צריכה כ-%s (המגבלה %s).") % (ltr("%.1f GB" % float(m.group(1))), ltr("%.1f GB" % float(m.group(2))), ltr("%.0f GB" % float(m.group(3))))
     table = (("RAM budget", T("אין כרגע מספיק RAM פנוי לעבודה הזו")), ("VRAM budget", T("ה-GPU עסוק, מחכה שיתפנה מקום")), ("free RAM", T("ה-RAM של המחשב נמוך, מחכה")),
              ("free commit", T("ה-RAM של המחשב נמוך, מחכה")), ("paused", T("הכול מושהה")), ("I am playing", T("אתה משחק, עבודות GPU מחכות")), ("held by owner", T("עצרת אותה בעצמך")),
              ("max concurrent", T("כבר רצות הרבה עבודות במקביל")), ("another", T("עבודה מאותו סוג כבר רצה")), ("GPU lock", T("תוכנה אחרת משתמשת ב-GPU")),
@@ -1254,6 +1263,9 @@ class ChatPanel(W.QFrame):
                 row.addWidget(self.act_button("arrow", T("שלח אל…"), lambda _=False, p=images[0]: m.send_menu(p, QtGui.QCursor.pos()), T("המשך עם התמונה במודל אחר")))
             if st == "failed":
                 row.addWidget(self.act_button("doc", T("פלט מלא"), lambda _=False, i=j["id"], n=j["name"]: m.show_output(i, n)))
+        if st == "queued" and not j.get("held") and str(j.get("reason", "")).startswith(("VRAM budget", "RAM budget", "max concurrent", "free RAM", "free commit", "disk busy")):
+            row.addWidget(self.act_button("play", T("הרץ בכל זאת"), lambda _=False, i=j["id"]: m.api({"op": "force_start", "id": i}),
+                                          T("מתעלם מהמגבלות של RAM ו-GPU (לא מהבלם ולא מ״עצור הכול״). ייתכן שהעבודה תרוץ לאט יותר.")))
         if st in ("queued", "held", "running", "paused"):
             row.addWidget(self.act_button("x", T("בטל"), lambda _=False, i=j["id"]: m.api({"op": "cancel", "id": i})))
         row.addStretch(1)
@@ -2526,6 +2538,9 @@ class Main(W.QMainWindow):
         if key in ("top", "up", "down"):
             if qs:
                 self.api({"op": "move", "ids": qs, "to": key})
+        elif key == "force":
+            for i in qs:
+                self.api({"op": "force_start", "id": i})
         elif key == "hold":
             for i in ids:
                 j = jobs.get(i)
@@ -2542,7 +2557,7 @@ class Main(W.QMainWindow):
         if not self.queue.selected_ids():
             return
         m = W.QMenu(self)
-        for key, text in (("top", T("הרץ ראשונה")), ("up", T("הקדם")), ("down", T("דחה")), ("hold", T("עצור / שחרר")), ("cancel", T("בטל"))):
+        for key, text in (("top", T("הרץ ראשונה")), ("force", T("הרץ בכל זאת")), ("up", T("הקדם")), ("down", T("דחה")), ("hold", T("עצור / שחרר")), ("cancel", T("בטל"))):
             m.addAction(text, lambda k=key: self.queue_action(k))
         m.exec(self.queue.viewport().mapToGlobal(pos))
 

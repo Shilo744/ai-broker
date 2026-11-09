@@ -50,6 +50,7 @@ def plan(queued, running, limits, flags, sysinfo, lock, warm_models, cfg):
         own_vram = sum(r.get("cur_vram") or 0 for r in run)
         foreign_vram = max(0.0, sysinfo.get("gpu_used", 0.0) - own_vram)
         gpu = j["klass"] == "gpu"
+        force = j.get("manual") == 2              # the owner pressed "run anyway": the soft budgets are skipped, the hard gates below are not
         if flags.get("paused"):
             why = "paused"
         elif brake:
@@ -60,19 +61,20 @@ def plan(queued, running, limits, flags, sysinfo, lock, warm_models, cfg):
             why = "held by owner"
         elif not j.get("after_ok", True):
             why = "waiting for the job it depends on"
-        elif len(run) >= limits["max_jobs"]:
+        elif len(run) >= limits["max_jobs"] and not force:
             why = "max concurrent jobs (%d)" % limits["max_jobs"]
         elif j.get("max_parallel") and sum(1 for r in run if r.get("type") == j["type"]) >= j["max_parallel"]:
             why = "another %s is running (max_parallel %d)" % (j["type"], j["max_parallel"])
-        elif run and sysinfo.get("disk_avg", 0.0) > limits.get("disk_busy_pct", 101.0):
+        elif run and not force and sysinfo.get("disk_avg", 0.0) > limits.get("disk_busy_pct", 101.0):
             why = "disk busy: %.0f%% (limit %.0f%%)" % (sysinfo["disk_avg"], limits["disk_busy_pct"])
-        elif ram_used + j["est_ram"] > limits["ram_gb"] and run:
-            why = "RAM budget: %.0f running + %.0f needed > %.0f limit" % (ram_used, j["est_ram"], limits["ram_gb"])
-        elif gpu and vram_used + foreign_vram + j["est_vram"] > limits["vram_gb"] and (run or foreign_vram > 0):
-            why = "VRAM budget: %.0f used by jobs, %.1f by other programs + %.0f needed > %.0f limit" % (vram_used, foreign_vram, j["est_vram"], limits["vram_gb"])
-        elif sysinfo["ram_avail"] - ramp_ram - j["est_ram"] < limits["reserve_ram_gb"]:
+        elif not force and ram_used + j["est_ram"] > limits["ram_gb"] and run:
+            why = "RAM budget: %.1f GB running + %.1f GB needed > %.0f GB limit" % (ram_used, j["est_ram"], limits["ram_gb"])
+        elif not force and gpu and vram_used + foreign_vram + j["est_vram"] > limits["vram_gb"] and (run or foreign_vram > 0):
+            hogs = ", ".join("%s %.1f GB" % (n, g) for n, g in (sysinfo.get("gpu_hogs") or [])[:3])
+            why = "VRAM budget: %.1f GB used by jobs, %.1f GB by other programs%s + %.1f GB needed > %.0f GB limit" % (vram_used, foreign_vram, " (%s)" % hogs if hogs else "", j["est_vram"], limits["vram_gb"])
+        elif not force and sysinfo["ram_avail"] - ramp_ram - j["est_ram"] < limits["reserve_ram_gb"]:
             why = "free RAM would drop below %.0f GB (%.0f free now)" % (limits["reserve_ram_gb"], sysinfo["ram_avail"])
-        elif sysinfo["commit_avail"] - ramp_commit - j["est_commit"] < limits["min_commit_free_gb"]:
+        elif not force and sysinfo["commit_avail"] - ramp_commit - j["est_commit"] < limits["min_commit_free_gb"]:
             why = "free commit would drop below %.0f GB" % limits["min_commit_free_gb"]
         elif (gpu or j.get("hold_lock") or j.get("self_lock")) and cfg.get("respect_gpu_lock", True):
             if lock == "foreign":

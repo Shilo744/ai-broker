@@ -108,6 +108,41 @@ def test_foreign_lock_and_self_lock():
     assert ids(r) == [] and "lock" in r[1][2]
 
 
+def test_vram_reason_has_numbers_and_names():
+    """The owner asked why a job waited with '10 GB free': the reason now says what the job needs, how much is free and who holds the rest."""
+    sysinfo = dict(SYS, gpu_used=6.0, gpu_hogs=[("chrome.exe", 2.5), ("python.exe", 2.0)])
+    lim = dict(LIM, vram_gb=16.0)
+    r = run([job(1, "zimage", 15.3, 13.6)], sysinfo=sysinfo, lim=lim)
+    assert ids(r) == []
+    why = r[1][1]
+    assert why.startswith("VRAM budget") and "13.6 GB needed" in why and "6.0 GB by other programs" in why and "chrome.exe 2.5 GB" in why and "16 GB limit" in why, why
+
+
+def test_force_start_skips_the_soft_budgets_only():
+    sysinfo = dict(SYS, gpu_used=6.0)
+    lim = dict(LIM, vram_gb=16.0)
+    q = [job(1, "zimage", 15.3, 13.6, manual=2)]
+    assert ids(run(q, sysinfo=sysinfo, lim=lim)) == [1]                                       # "run anyway": the VRAM budget is skipped
+    assert ids(run([dict(q[0], manual=1)], sysinfo=sysinfo, lim=lim)) == []                   # moved by hand is NOT "run anyway"
+    assert ids(run(q, sysinfo=sysinfo, lim=lim, flags=dict(paused=True, playing=False))) == []           # the pause stays
+    assert ids(run(q, sysinfo=sysinfo, lim=lim, flags=dict(paused=False, playing=True))) == []           # "I am playing" stays
+    assert ids(run([dict(q[0], held=1)], sysinfo=sysinfo, lim=lim)) == []                    # held by the owner stays
+    assert ids(run(q, sysinfo=dict(sysinfo, ram_avail=2.0), lim=lim)) == []                   # the hard RAM brake stays
+    run1 = dict(est_ram=7, est_vram=7, est_commit=9, cur_ws=6, cur_vram=6, cur_commit=8, type="x", model="x", klass="gpu", hold_lock=0, self_lock=0)
+    assert ids(run([dict(job(2, "zimage", 15.3, 13.6, manual=2), max_parallel=1)], running=[dict(run1, type="zimage")], sysinfo=sysinfo, lim=lim)) == []   # max_parallel stays
+
+
+def test_vram_estimate_is_not_decided_by_one_outlier():
+    import tempfile
+    from aibroker import store
+    s = store.Store.__new__(store.Store)
+    peaks = [10.45, 6.52, 10.45, 12.39, 10.45]               # the real Z-Image history that made a job wait: one 12.4 GB run decided the estimate (13.6)
+    s.history = lambda key: [dict(peak_ws=11.9, peak_commit=17.0, peak_vram=v) for v in peaks]
+    est = store.learned_estimate(s, "zimage", dict(ram_gb=14, vram_gb=9, commit_gb=18))
+    assert 11.0 <= est["vram_gb"] <= 12.0, est
+    assert est["ram_gb"] > 12.0                                # RAM keeps the cautious rule
+
+
 if __name__ == "__main__":
     n = 0
     for k, f in sorted(globals().items()):
