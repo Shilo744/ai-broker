@@ -29,7 +29,7 @@ QPushButton#bigplay, QPushButton#bigpause { padding: 9px 20px; font-size: 12pt; 
 QPushButton#bigplay:checked { background: #f0506e; border-color: #f0506e; color: white; }
 QPushButton#bigpause:checked { background: #f5a524; border-color: #f5a524; color: #1a1300; }
 QListWidget, QTableWidget { background: transparent; border: none; outline: none; gridline-color: #262b36; alternate-background-color: #151920; }
-QListWidget#models::item { padding: 8px 10px; border-radius: 8px; margin: 1px 4px; } QListWidget#models::item:selected { background: #212a3d; color: white; }
+QListWidget#models::item { font-size: 10.5pt; padding: 8px 8px; border-radius: 8px; margin: 1px 4px; } QListWidget#models::item:selected { background: #212a3d; color: white; }
 QListWidget#models::item:hover { background: #1a2030; }
 QListWidget#files::item { border-radius: 8px; padding: 4px; } QListWidget#files::item:selected { background: #212a3d; } QListWidget#files::item:hover { background: #1a2030; }
 QTableWidget { selection-background-color: #212a3d; selection-color: white; }
