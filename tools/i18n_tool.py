@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TARGETS = ["aibroker/gui.py", "aibroker/kit.py", "aibroker/assistant.py", "aibroker/permissions.py", "aibroker/system.py", "aibroker/daemon.py", "aibroker/mcp_server.py"]
+TARGETS = ["aibroker/gui.py", "aibroker/kit.py", "aibroker/assistant.py", "aibroker/permissions.py", "aibroker/system.py", "aibroker/daemon.py", "aibroker/mcp_server.py", "aibroker/catalog.py"]
 HEB = re.compile("[֐-׿]")
 # Files whose module / class constants are wrapped too (the window process fixes its language at start; a change of language restarts the window).
 # The other files (permissions, daemon ...) run in the broker process: their constants stay plain and are wrapped where they are USED.

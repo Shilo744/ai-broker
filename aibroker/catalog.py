@@ -55,17 +55,22 @@ def file_path(f, rts):
     return str(Path(base) / f["dest"]) if base else None
 
 
-def status(pack, rts):
-    """'installed' (every file there with the right size), 'partial', 'missing', or 'unknown' (the pack has no file list: only its tools can be checked)."""
+def status(pack, rts, profile=None):
+    """'installed' (every file there with the right size), 'partial', 'missing', or 'unknown' (nothing the program can check: the owner set it up another way).
+    A pack that has no files, only tools to run on (Blender), is installed when those tools are found."""
     files = pack.get("files") or []
-    if not files:
+    detect = pack.get("detect") or []
+    items = files or detect
+    if not items:
+        if pack.get("runtime") and profile is not None:
+            return "installed" if not runtime_missing(pack, profile) else "missing"
         return "unknown"
     have = 0
-    for f in files:
+    for f in items:
         p = file_path(f, rts)
         if p and os.path.isfile(p) and (not f.get("size") or os.path.getsize(p) == f["size"]):
             have += 1
-    return "installed" if have == len(files) else "partial" if have else "missing"
+    return "installed" if have == len(items) else "partial" if have else "missing"
 
 
 def runtime_missing(pack, profile):
@@ -132,7 +137,7 @@ def recommend(categories, profile, rts=None, packs=None):
         if categories and p.get("category") not in categories:
             continue
         lvl, why = verdict(p, profile)
-        out.append({"pack": p, "fit": lvl, "why": why, "status": status(p, rts), "missing_tools": runtime_missing(p, profile)})
+        out.append({"pack": p, "fit": lvl, "why": why, "status": status(p, rts, profile), "missing_tools": runtime_missing(p, profile)})
     order = {"ok": 0, "tight": 1, "no": 2}
     out.sort(key=lambda r: (order[r["fit"]], r["pack"].get("title_en", r["pack"]["id"])))
     return out

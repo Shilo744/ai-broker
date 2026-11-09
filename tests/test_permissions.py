@@ -75,6 +75,8 @@ DECISIONS = [
     (("mcp__ai-broker__queue_status", {}), ("allow", "allow", "allow")),
     (("mcp__ai-broker__submit_job", {}), ("allow", "allow", "allow")),
     (("mcp__ai-broker__pause_queue", {}), ("ask", "ask", "allow")),
+    (("mcp__ai-broker__install_model_pack", {"pack_ids": ["acestep_music"]}), ("ask", "ask", "allow")),
+    (("mcp__ai-broker__list_model_packs", {}), ("allow", "allow", "allow")),
     (("Write", {"file_path": "C:\\p\\a.md"}), ("ask", "ask", "allow")),
 ]
 

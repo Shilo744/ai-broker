@@ -17,7 +17,8 @@ Several agents, a game and a screen recorder share one laptop. When 22 shape job
 - **"I am playing / recording".** One toggle: GPU jobs wait and running GPU jobs are suspended, so the game or the recording does not stutter.
 - **One window.** Resources in a thin strip, a list of model types with their results, a chat page for each model (it explains in plain words what the model does), the queue that opens by itself when there is work, history with "run again with the same settings", previews and a turntable for 3D results. Hebrew (right-to-left) and English.
 - **Claude built in, no terminal.** A chat with Claude inside the window runs Claude Code headless: it sees the queue, runs jobs, looks at your hardware and recommends models. **You choose how much it may do without asking** (careful / normal / free); every question is a card in the chat with a plain-language description. See [Permission levels](#the-assistant-and-its-permission-levels).
-- **An MCP server for Claude Code.** Agents get tools such as `submit_job`, `queue_status`, `wait_for_job` and `hardware_profile`, and are told to queue heavy work instead of running it themselves. There is also a command line, `aijob`.
+- **First-run setup for models.** Choose what you want to do (images, 3D, sound and music, game tests); the program checks your GPU, RAM and disk, shows which model packs suit your computer and which are already installed, and downloads the ticked ones as jobs in the queue (from verified official sources only, resumable, checked by size and SHA-256). Packs that cannot be downloaded automatically are handed to Claude. Open it again from Settings.
+- **An MCP server for Claude Code.** Agents get tools such as `submit_job`, `queue_status`, `wait_for_job`, `hardware_profile`, `list_model_packs` and `install_model_pack`, and are told to queue heavy work instead of running it themselves. There is also a command line, `aijob`.
 - **Job types are data files.** A new kind of job is a small JSON file (command template, parameters, memory estimate, texts in two languages), not code.
 - **Per-model output folders.** Every job writes to `output/<model type>/<date>_<name>/` with a `result.json` and a `job.log`.
 
@@ -118,7 +119,8 @@ Every second the broker walks the queue in order and starts a job when all of th
 | `jobtypes/`, `adapters/` | job types (JSON) and project-specific adapters |
 | `runners/` | small scripts that run a model |
 | `skill/` | instructions for agents (`SKILL.md`) and the assistant prompt |
-| `tests/` | `test_scheduler.py`, `test_permissions.py`, `test_i18n.py`, `ui_smoke.py`, `e2e_approval.py` |
+| `catalog/` | model packs of the setup (JSON: files with official URL, size and SHA-256, hardware needs, licence) |
+| `tests/` | `test_scheduler.py`, `test_permissions.py`, `test_i18n.py`, `test_catalog.py`, `test_download.py`, `ui_smoke.py`, `e2e_approval.py`, `e2e_setup.py`, `e2e_wizard.py` |
 | `docs/` | model notes, test report, progress tracker |
 
 ## Development

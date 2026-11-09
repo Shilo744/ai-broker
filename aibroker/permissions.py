@@ -221,16 +221,27 @@ def analyze_shell(cmd, desc=""):
 
 # ---------------------------------------------------------------- every other tool
 BROKER = "mcp__ai-broker__"
-BROKER_READ = {"queue_status", "resources", "job_status", "job_output", "job_history", "list_job_types", "get_limits", "hardware_profile", "wait_for_job", "approve"}
+BROKER_READ = {"queue_status", "resources", "job_status", "job_output", "job_history", "list_job_types", "get_limits", "hardware_profile", "wait_for_job", "approve", "list_model_packs"}
 BROKER_RUN = {"submit_job", "rerun_job"}
 BROKER_CONTROL = {"cancel_job", "move_job", "hold_job", "release_job", "pause_queue", "resume_queue", "set_playing_mode", "set_limits"}
 BROKER_TEXT = {
+    "list_model_packs": "בודק אילו מודלים מתאימים למחשב", "install_model_pack": "מוריד מודלים",
     "queue_status": "בודק את התור", "resources": "בודק את המשאבים", "job_status": "בודק עבודה", "job_output": "קורא את הפלט של עבודה", "job_history": "קורא את ההיסטוריה",
     "list_job_types": "בודק אילו סוגי עבודות יש", "get_limits": "בודק את המגבלות", "hardware_profile": "בודק את החומרה של המחשב", "wait_for_job": "ממתין לסיום עבודה",
     "submit_job": "מוסיף עבודה לתור", "rerun_job": "מריץ עבודה שוב", "cancel_job": "מבטל עבודה", "move_job": "משנה סדר בתור", "hold_job": "מחזיק עבודה בתור", "release_job": "משחרר עבודה",
     "pause_queue": "עוצר את התור", "resume_queue": "ממשיך את התור", "set_playing_mode": "משנה את מצב ״אני משחק״", "set_limits": "משנה את המגבלות של RAM ו-GPU",
 }
 PROTECTED_FILE = re.compile(r"(\.claude[\\/]|\.claude\.json|[\\/]windows[\\/]|[\\/]system32[\\/]|[\\/]program files|[\\/]startup[\\/]|\.ssh[\\/]|CLAUDE\.md$)", re.I)
+
+
+def _install_verdict(tin):
+    """install_model_pack: say which models and how many GB, from the catalog (the files come only from its verified sources)."""
+    from . import catalog, i18n
+    ids = [str(i) for i in (tin or {}).get("pack_ids") or []]
+    packs = catalog.load()
+    titles = [((packs.get(i) or {}).get("title_en") if i18n.lang() == "en" else None) or (packs.get(i) or {}).get("title") or i for i in ids]
+    gb = sum(int(f.get("size") or 0) for i in ids for f in (packs.get(i) or {}).get("files", [])) / 1e9
+    return Verdict("change", "download", T("מוריד מודלים: %s (עד %.1f GB)") % (", ".join(titles) or "-", gb), json.dumps(tin, ensure_ascii=False)[:300], False, T(KIND_WHY["download"]))
 
 
 def analyze(tool, tin):
@@ -251,6 +262,8 @@ def analyze(tool, tin):
         return Verdict("change", "write", T("כותב קובץ: %s") % p if p else T("כותב קובץ"), p, False, T(KIND_WHY["write"]))
     if tool.startswith(BROKER):
         name = tool[len(BROKER):]
+        if name == "install_model_pack":
+            return _install_verdict(tin)
         txt = T(BROKER_TEXT.get(name, name))
         det = json.dumps(tin, ensure_ascii=False)[:300] if tin else ""
         if name in BROKER_READ:
@@ -271,13 +284,9 @@ def decide(level, v):
     if v.risk == "danger":
         return "ask"
     if level == "careful":
-        if v.shell:
-            return "ask"
-        if v.kind == "tool":
-            return "ask"
-        if v.kind == "write":
-            return "ask"
-        return "allow"
+        if "broker-run" in v.tags:                       # submit_job / rerun_job
+            return "allow"
+        return "allow" if (v.kind == "read" and not v.shell) else "ask"      # only reading is free; every command, download, install and change asks
     if level == "normal":
         if v.risk == "safe":
             return "allow"

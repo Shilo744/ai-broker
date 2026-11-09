@@ -18,7 +18,7 @@ MCP_JSON = paths.ROOT / "mcp.json"
 HISTORY = paths.HOME / "assistant_chat.json"
 
 BROKER = "mcp__ai-broker__"
-SAFE = [BROKER + n for n in ("queue_status", "resources", "job_status", "job_output", "job_history", "list_job_types", "get_limits", "hardware_profile", "submit_job", "rerun_job")] + [
+SAFE = [BROKER + n for n in ("queue_status", "resources", "job_status", "job_output", "job_history", "list_job_types", "get_limits", "hardware_profile", "list_model_packs", "submit_job", "rerun_job")] + [
     "Read", "Glob", "Grep", "WebSearch", "WebFetch",
     "Bash(nvidia-smi:*)", "Bash(dir:*)", "Bash(ls:*)", "Bash(du:*)", "Bash(where:*)",
     "Edit(docs/MODELS.md)", "Write(docs/MODELS.md)", "Edit(DOWNLOADS.md)", "Write(DOWNLOADS.md)"]

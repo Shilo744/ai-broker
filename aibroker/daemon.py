@@ -19,7 +19,7 @@ import traceback
 import psutil
 
 from .i18n import T
-from . import hardware, i18n, paths, permissions, scheduler, store as st, winutil as wu
+from . import catalog, hardware, i18n, paths, permissions, scheduler, store as st, winutil as wu
 
 TERMINAL = ("done", "failed", "cancelled", "lost")
 
@@ -635,6 +635,41 @@ class Broker:
             out.append({k: e[k] for k in ("id", "ts", "tool", "text", "risk", "kind", "why", "detail", "shell", "level")})
         return out
 
+    # ------------------------------------------------------------ model packs (first-run setup)
+    def packs_view(self, categories=None):
+        """The packs with their verdict for THIS computer, their install state and what is still to download."""
+        prof = hardware.profile()
+        rts = catalog.roots(self.cfg)
+        en = i18n.lang() == "en"
+        out = []
+        for r in catalog.recommend(categories, prof, rts):
+            p = r["pack"]
+            todo = catalog.plan([p["id"]], prof, rts)
+            files = p.get("files") or []
+            out.append(dict(id=p["id"], category=p["category"], title=(p.get("title_en") if en else None) or p["title"], what=(p.get("what_en") if en else None) or p.get("what", ""),
+                            fit=r["fit"], why=r["why"], status=r["status"], license=(p.get("license") or {}).get("name", ""), source=p.get("source", ""), needs=p.get("needs", {}),
+                            size_bytes=sum(int(f.get("size") or 0) for f in files), todo_bytes=todo["total_bytes"], downloadable=bool(files), manual=(p.get("manual_en") if en else None) or p.get("manual", ""),
+                            note=(p.get("note_en") if en else None) or p.get("note", ""), tools_missing=r["missing_tools"], jobtypes=p.get("jobtypes", [])))
+        return dict(ok=True, packs=out, profile=dict(gpu=prof.get("gpu"), ram_gb=prof.get("ram_gb"), disks=prof.get("disks"), software=prof.get("software")), roots=rts)
+
+    def install_packs(self, ids, requester="setup"):
+        """Turns the chosen packs into `download` jobs in the queue. Nothing here fetches anything itself."""
+        prof = hardware.profile()
+        rts = catalog.roots(self.cfg)
+        plan = catalog.plan(ids, prof, rts)
+        if plan["tasks"]:
+            probe = Path(plan["tasks"][0]["dest"])
+            while not probe.exists() and probe.parent != probe:
+                probe = probe.parent
+            free = shutil.disk_usage(str(probe)).free
+            if plan["total_bytes"] + (5 << 30) > free:
+                return dict(ok=False, error="not enough free disk space: %.1f GB needed, %.1f GB free" % (plan["total_bytes"] / 1e9, free / 1e9))
+        job_ids = []
+        for t in plan["tasks"]:
+            job_ids.append(self.submit(dict(type="download", params=dict(url=t["url"], dest=t["dest"], sha256=t["sha256"], size=t["size"]), name=os.path.basename(t["dest"]), requester=requester)))
+        self.log("model setup: %d download job(s) queued for %s (%.1f GB)" % (len(job_ids), ", ".join(ids), plan["total_bytes"] / 1e9))
+        return dict(ok=True, ids=job_ids, total_bytes=plan["total_bytes"], manual=plan["manual"], tasks=[dict(pack=t["pack"], dest=t["dest"], size=t["size"]) for t in plan["tasks"]])
+
     def tail(self, jid, nbytes=20000):
         j = self.store.get(jid)
         if not j or not j.get("log"):
@@ -733,6 +768,10 @@ class Broker:
             return self.perm_get(int(req["id"]))
         if op == "perm_answer":
             return self.perm_answer(int(req["id"]), bool(req.get("allow")), str(req.get("message", "")))
+        if op == "packs":
+            return self.packs_view(req.get("categories"))
+        if op == "install_packs":
+            return self.install_packs([str(i) for i in req.get("ids") or []], req.get("requester") or "setup")
         if op == "hardware":
             return hardware.profile()
         if op == "tail":

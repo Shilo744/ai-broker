@@ -18,7 +18,7 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 | 10 | Settings (gear icon) instead of "Advanced", with a language choice | [x] `SettingsDialog` (General / Behavior / Claude / Log) |
 | 11 | English as a UI language | [x] 429 texts, LTR layout, job types in two languages; `tests/test_i18n.py`; checked in screenshots. The in-window Claude answers in the chosen language (not run end to end in English) |
 | 12 | GitHub documentation in English | [x] README.md (English), README.he.md, DESIGN.md updated, requirements.txt, screenshots. **Not pushed**: waiting for the owner's yes |
-| 13 | First-run setup wizard: pick model kinds, hardware check, recommended models, download, finish; connect Claude Code | [ ] idea accepted; `hardware_profile` is done and used by the assistant |
+| 13 | First-run setup wizard: pick model kinds, hardware check, recommended models, download, finish; connect Claude Code | [x] v1: wizard (3 pages), catalog of 8 packs (ACE-Step and Qwen-Image-Edit downloadable with verified checksums, the rest detected or handed to Claude), download job type with resume and checksum, MCP tools; tests pass. Not in v1: LLM, installing ComfyUI / Python environments, other people's job types |
 | 14 | A file that tracks what is done | [x] this file |
 
 ## Done (checked)
@@ -29,7 +29,7 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 ## Not verified yet (say so to the owner)
 - The window the owner has open still runs the version before the English UI and the settings dialog (needs a restart of the window and the service; the owner's window and service were last restarted before these two commits).
 - A real Claude turn in English through the window; a real login autostart; macOS / Linux (Windows only).
-- The first-run wizard is not started.
+- The wizard has run end to end only against a local fake server and in the sandbox; no real model was downloaded from the internet by the setup (the three installed packs on the author's computer were detected as installed). The first real download will be the owner's own click.
 
 ## Decisions
 - Direction of a paragraph comes from the majority script (Hebrew share of letters >= 30 percent), not the first letter.

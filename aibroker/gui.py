@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt
 
 from . import i18n
 from .i18n import T
-from . import assistant, client, paths, permissions, system
+from . import assistant, catalog, client, paths, permissions, system
 from .theme import QSS, SYMBOL_ICON, dot_icon, icon, icon_pixmap, logo_pixmap, make_icon, qss, save_ico, style_titlebar, sym_icon, symbol_pixmap
 from .kit import (Bar, Chip, Dot, FlowLayout, Gauge, MessageView, MiniGauge, ModelDelegate, NoticeBar, Palette, ROLE_COUNT, ROLE_KIND, ROLE_RUN, ROLE_WAIT, Seg, TaskWidget, ToolHeader, tool_button)
 
@@ -378,7 +378,7 @@ class SettingsDialog(W.QDialog):
             return
         self.main.set_language(code)
 
-    def __init__(self, parent):
+    def __init__(self, parent, tab=None):
         super().__init__(parent)
         self.main = parent
         self.setWindowTitle(T("הגדרות"))
@@ -388,6 +388,7 @@ class SettingsDialog(W.QDialog):
         tabs = W.QTabWidget()
         tabs.setDocumentMode(True)
         outer.addWidget(tabs, 1)
+        self.tabs = tabs
 
         def page(title):
             w = W.QWidget()
@@ -429,6 +430,13 @@ class SettingsDialog(W.QDialog):
         c.setChecked(bool(parent.state and parent.state["flags"].get("toast")))
         c.toggled.connect(lambda on: parent.api({"op": "limits", "flags": {"toast": on}}))
         g.addWidget(c)
+        head(g, T("מודלים"))
+        setup = W.QPushButton(T("התקנת מודלים והתקנה ראשונית…"))
+        setup.clicked.connect(lambda: (self.accept(), parent.open_setup()))
+        srow = W.QHBoxLayout()
+        srow.addWidget(setup)
+        srow.addStretch(1)
+        g.addLayout(srow)
         head(g, T("תיקיות"))
         frow = W.QHBoxLayout()
         b = W.QPushButton(T("פתח את תיקיית הפלט"))
@@ -486,6 +494,8 @@ class SettingsDialog(W.QDialog):
         log.setPlainText(parent.log_text)
         lg.addWidget(log, 1)
 
+        if tab == "claude":
+            tabs.setCurrentIndex(2)
         close = W.QPushButton(T("סגור"))
         close.setObjectName("primary")
         close.clicked.connect(self.accept)
@@ -1716,6 +1726,410 @@ class LimitsPopup(W.QFrame):
         rl.addWidget(card)
 
 
+class SetupWizard(W.QDialog):
+    """First-run setup (also from Settings): 1) what do you want to do, 2) what suits THIS computer, 3) downloads with progress.
+    The recommendations come from the model catalog and the hardware profile (deterministic); the files only come from the verified sources of the catalog and run as
+    `download` jobs in the broker's queue."""
+    def __init__(self, main):
+        super().__init__(main)
+        self.main = main
+        self.setWindowTitle(T("התקנה ראשונית"))
+        self.resize(900, 700)
+        self.cats = set()
+        self.data = None
+        self.checks = {}
+        self.ids = []
+        self.rows = {}
+        self.page = 0
+        self.timer = QtCore.QTimer(self)
+        self.timer.timeout.connect(self.poll)
+        v = W.QVBoxLayout(self)
+        v.setContentsMargins(26, 20, 26, 16)
+        v.setSpacing(8)
+        self.step = W.QLabel("")
+        self.step.setObjectName("muted")
+        self.title = W.QLabel("")
+        self.title.setStyleSheet("font-size: 15pt; font-weight: 600;")
+        self.sub = W.QLabel("")
+        self.sub.setObjectName("muted")
+        self.sub.setWordWrap(True)
+        v.addWidget(self.step)
+        v.addWidget(self.title)
+        v.addWidget(self.sub)
+        self.stack = W.QStackedWidget()
+        v.addWidget(self.stack, 1)
+        self.stack.addWidget(self.build_cats())
+        self.page2 = W.QWidget()
+        self.stack.addWidget(self.page2)
+        self.page3 = W.QWidget()
+        self.stack.addWidget(self.page3)
+        foot = W.QHBoxLayout()
+        self.skip_btn = W.QPushButton(T("דלג, אעשה את זה אחר כך"))
+        self.skip_btn.setObjectName("flat")
+        self.skip_btn.clicked.connect(self.skip)
+        self.back_btn = W.QPushButton(T("חזרה"))
+        self.back_btn.clicked.connect(self.back)
+        self.next_btn = W.QPushButton(T("הבא"))
+        self.next_btn.setObjectName("primary")
+        self.next_btn.clicked.connect(self.next)
+        foot.addWidget(self.skip_btn)
+        foot.addStretch(1)
+        foot.addWidget(self.back_btn)
+        foot.addWidget(self.next_btn)
+        v.addLayout(foot)
+        self.show_page(0)
+
+    # ---------------------------------------------------------------- page 1: what do you want to do
+    def build_cats(self):
+        w = W.QWidget()
+        g = W.QGridLayout(w)
+        g.setContentsMargins(0, 8, 0, 0)
+        g.setSpacing(12)
+        self.cat_cards = {}
+        for i, (key, title, desc, icon_name) in enumerate(catalog.CATEGORIES):
+            card = ClickCard()
+            card.setObjectName("catcard")
+            soon = key == "text"
+            h = W.QHBoxLayout(card)
+            h.setContentsMargins(16, 14, 16, 14)
+            h.setSpacing(14)
+            ic = W.QLabel()
+            ic.setPixmap(icon_pixmap(icon_name, "#868a91" if soon else "#b4b8bf", 30))
+            ic.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            col = W.QVBoxLayout()
+            t = W.QLabel(T(title))
+            t.setStyleSheet("font-size: 11pt; font-weight: 600;" + (" color: #868a91;" if soon else ""))
+            d = W.QLabel(T(desc))
+            d.setObjectName("muted")
+            d.setWordWrap(True)
+            for x in (t, d):
+                x.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            col.addWidget(t)
+            col.addWidget(d)
+            mark = W.QLabel()
+            mark.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            h.addWidget(ic, 0, Qt.AlignTop)
+            h.addLayout(col, 1)
+            h.addWidget(mark, 0, Qt.AlignTop)
+            if not soon:
+                card.clicked.connect(lambda k=key: self.toggle_cat(k))
+            else:
+                card.setCursor(Qt.ArrowCursor)
+            self.cat_cards[key] = (card, mark, soon)
+            g.addWidget(card, i // 2, i % 2)
+        g.setRowStretch(len(catalog.CATEGORIES) // 2 + 1, 1)
+        self.paint_cats()
+        return w
+
+    def toggle_cat(self, key):
+        self.cats.symmetric_difference_update({key})
+        self.paint_cats()
+
+    def paint_cats(self):
+        for key, (card, mark, soon) in self.cat_cards.items():
+            on = key in self.cats
+            card.setStyleSheet("QFrame#catcard { background: %s; border: 1px solid %s; border-radius: 8px; }" % ("#233350" if on else "#2b2d30", "#3574f0" if on else "#393b40"))
+            mark.setPixmap(icon_pixmap("check", "#3574f0", 20) if on else QtGui.QPixmap())
+        if hasattr(self, "next_btn"):
+            self.next_btn.setEnabled(self.page != 0 or bool(self.cats))
+
+    # ---------------------------------------------------------------- navigation
+    def show_page(self, n):
+        self.page = n
+        self.stack.setCurrentIndex(n)
+        self.step.setText(T("שלב %d מתוך 3") % (n + 1))
+        self.back_btn.setVisible(n == 1)
+        self.skip_btn.setVisible(n == 0)
+        if n == 0:
+            self.title.setText(T("מה תרצה לעשות עם התוכנה?"))
+            self.sub.setText(T("סמן מה מעניין אותך. בשלב הבא נבדוק מה מתאים למחשב שלך."))
+            self.next_btn.setText(T("הבא"))
+            self.next_btn.setEnabled(bool(self.cats))
+        elif n == 1:
+            self.title.setText(T("מה מתאים למחשב שלך"))
+            self.next_btn.setEnabled(True)
+        else:
+            self.title.setText(T("מתקין…"))
+            self.sub.setText(T("ההורדות רצות בתור, ואפשר לסגור את החלון: הן ממשיכות ברקע."))
+            self.back_btn.setVisible(False)
+            self.skip_btn.setVisible(False)
+
+    def back(self):
+        self.show_page(0)
+
+    def skip(self):
+        self.main.settings.setValue("setup_done", True)
+        self.reject()
+
+    def next(self):
+        if self.page == 0:
+            self.build_recs()
+        elif self.page == 1:
+            self.start_install()
+        else:
+            self.main.settings.setValue("setup_done", True)
+            self.accept()
+
+    # ---------------------------------------------------------------- page 2: what suits this computer
+    def build_recs(self):
+        self.next_btn.setEnabled(False)
+        W.QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            r = client.call({"op": "packs", "categories": sorted(self.cats)}, timeout=30)
+        except client.BrokerDown:
+            r = None
+        finally:
+            W.QApplication.restoreOverrideCursor()
+        if not r or not r.get("ok"):
+            W.QMessageBox.warning(self, T("התקנה ראשונית"), T("השירות לא עונה, אי אפשר לבדוק את המחשב עכשיו."))
+            self.next_btn.setEnabled(True)
+            return
+        self.data = r
+        w = self.page2
+        if w.layout():
+            QtGui.QGuiApplication.processEvents()
+            W.QWidget().setLayout(w.layout())                       # drop the old layout (a second visit)
+        lay = W.QVBoxLayout(w)
+        lay.setContentsMargins(0, 6, 0, 0)
+        lay.setSpacing(8)
+        prof = r["profile"]
+        gpu = prof.get("gpu") or {}
+        free = [d for d in prof.get("disks") or []]
+        models_drive = os.path.splitdrive(r["roots"].get("comfy_models") or r["roots"].get("models") or "")[0].upper()
+        free_gb = next((d["free_gb"] for d in free if d["drive"].upper() == models_drive), (free[0]["free_gb"] if free else 0))
+        self.free_gb = float(free_gb or 0)
+        hw = W.QLabel(T("המחשב שלך: %s · %s · %s · %s") % (gpu.get("name", T("בלי כרטיס מסך של NVIDIA")), ltr("VRAM %.0f GB" % gpu.get("vram_gb", 0)), ltr("RAM %.0f GB" % (prof.get("ram_gb") or 0)),
+                                                         T("פנוי בדיסק: %s") % ltr("%.0f GB" % self.free_gb)))
+        hw.setObjectName("statcard")
+        hw.setWordWrap(True)
+        hw.setContentsMargins(12, 9, 12, 9)
+        lay.addWidget(hw)
+        self.sub.setText(T("סימנו מראש מה שמתאים למחשב שלך ועוד לא מותקן. אפשר לשנות."))
+        scroll = W.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(W.QFrame.NoFrame)
+        inner = W.QWidget()
+        inner.setStyleSheet("background: transparent;")
+        il = W.QVBoxLayout(inner)
+        il.setContentsMargins(0, 0, 6, 0)
+        il.setSpacing(10)
+        self.checks = {}
+        shown = 0
+        for p in r["packs"]:
+            if p["category"] not in self.cats:
+                continue
+            shown += 1
+            il.addWidget(self.pack_card(p))
+        if not shown:
+            nl = W.QLabel(T("אין עדיין מודלים בקטגוריות שבחרת."))
+            nl.setObjectName("muted")
+            il.addWidget(nl)
+        il.addStretch(1)
+        scroll.setWidget(inner)
+        lay.addWidget(scroll, 1)
+        self.total = W.QLabel("")
+        self.total.setObjectName("muted")
+        lay.addWidget(self.total)
+        self.show_page(1)
+        self.update_total()
+
+    def pack_card(self, p):
+        card = W.QFrame()
+        card.setObjectName("statcard")
+        h = W.QHBoxLayout(card)
+        h.setContentsMargins(14, 12, 14, 12)
+        h.setSpacing(12)
+        cb = W.QCheckBox()
+        can = p["downloadable"] and p["status"] != "installed" and p["fit"] != "no" and not p["tools_missing"]
+        cb.setEnabled(bool(can))
+        cb.setChecked(bool(can and p["fit"] == "ok"))
+        cb.toggled.connect(lambda _=False: self.update_total())
+        self.checks[p["id"]] = (cb, p)
+        h.addWidget(cb, 0, Qt.AlignTop)
+        col = W.QVBoxLayout()
+        col.setSpacing(5)
+        t = W.QLabel(p["title"])
+        t.setStyleSheet("font-weight: 600; font-size: 10.5pt;")
+        t.setWordWrap(True)
+        d = W.QLabel(p["what"])
+        d.setObjectName("muted")
+        d.setWordWrap(True)
+        col.addWidget(t)
+        col.addWidget(d)
+        chips = FlowLayout()
+        fit = {"ok": (T("מתאים למחשב שלך"), "ok"), "tight": (T("גבולי: ייתכנו האטות"), "warn"), "no": (T("לא מתאים למחשב שלך"), "bad")}[p["fit"]]
+        chips.addWidget(Chip(fit[0], fit[1]))
+        st = {"installed": (T("מותקן"), "ok"), "partial": (T("מותקן חלקית"), "warn"), "missing": (T("לא מותקן"), "muted"), "unknown": (T("לא ידוע אם מותקן"), "muted")}[p["status"]]
+        chips.addWidget(Chip(st[0], st[1]))
+        if p["todo_bytes"]:
+            chips.addWidget(Chip(T("להורדה: %s") % ("%.1f GB" % (p["todo_bytes"] / 1e9)), "info"))
+        for tool in p["tools_missing"]:
+            chips.addWidget(Chip(T("חסר: %s") % tool, "bad"))
+        if p.get("license"):
+            chips.addWidget(Chip(T("רישיון: %s") % p["license"], "muted"))
+        need = p.get("needs") or {}
+        if need.get("vram_min_gb") or need.get("ram_gb"):
+            chips.addWidget(Chip(ltr("VRAM %s GB · RAM %s GB" % (need.get("vram_min_gb", 0), need.get("ram_gb", 0))), "muted"))
+        col.addLayout(chips)
+        extra = p.get("manual") if (not p["downloadable"] and p["status"] != "installed") else p.get("note")
+        if extra:
+            e = W.QLabel(extra)
+            e.setObjectName("muted")
+            e.setWordWrap(True)
+            col.addWidget(e)
+        if (not p["downloadable"] and p["status"] != "installed") or p["tools_missing"]:
+            ask = W.QPushButton(T("בקש מ-Claude לעזור"))
+            ask.setObjectName("tool")
+            ask.setIcon(icon("sparkles", "#b4b8bf", 15))
+            ask.clicked.connect(lambda _=False, pk=p: self.ask_claude(pk))
+            row = W.QHBoxLayout()
+            row.addWidget(ask)
+            row.addStretch(1)
+            col.addLayout(row)
+        h.addLayout(col, 1)
+        return card
+
+    def update_total(self):
+        ids = [i for i, (cb, _p) in self.checks.items() if cb.isChecked()]
+        gb = sum(p["todo_bytes"] for i, (cb, p) in self.checks.items() if cb.isChecked()) / 1e9
+        enough = gb + 5 <= self.free_gb
+        self.total.setText(T("להורדה: %s · פנוי בדיסק: %s") % (ltr("%.1f GB" % gb), ltr("%.0f GB" % self.free_gb)) + ("" if enough else T("   ·   אין מספיק מקום פנוי")))
+        self.total.setStyleSheet("" if enough else "color: #db5c5c;")
+        self.next_btn.setText(T("התקן את המסומנים") if ids else T("סיום"))
+        self.next_btn.setEnabled(enough)
+
+    def ask_claude(self, p):
+        msg = T("אני רוצה להתקין את ״%s״ (%s). בדוק מה חסר אצלי ועזור לי להתקין את זה, ובקש אישור לפני כל הורדה.") % (p["title"], p.get("source") or "")
+        self.main.settings.setValue("setup_done", True)
+        self.accept()
+        self.main.ask_assistant(T("עזור לי להתקין: %s") % p["title"], msg)
+
+    # ---------------------------------------------------------------- page 3: downloads
+    def start_install(self):
+        ids = [i for i, (cb, _p) in self.checks.items() if cb.isChecked()]
+        if not ids:
+            self.main.settings.setValue("setup_done", True)
+            self.accept()
+            return
+        try:
+            r = client.call({"op": "install_packs", "ids": ids, "requester": "setup"}, timeout=60)
+        except client.BrokerDown:
+            r = None
+        if not r or not r.get("ok"):
+            W.QMessageBox.warning(self, T("התקנה ראשונית"), (r or {}).get("error") or T("השירות לא עונה."))
+            return
+        self.ids = r["ids"]
+        w = self.page3
+        lay = W.QVBoxLayout(w)
+        lay.setContentsMargins(0, 8, 0, 0)
+        lay.setSpacing(8)
+        self.rows = {}
+        for jid, task in zip(self.ids, r["tasks"]):
+            row = W.QFrame()
+            row.setObjectName("statcard")
+            rl = W.QVBoxLayout(row)
+            rl.setContentsMargins(12, 9, 12, 9)
+            rl.setSpacing(5)
+            top = W.QHBoxLayout()
+            name = W.QLabel(os.path.basename(task["dest"]))
+            name.setLayoutDirection(Qt.LeftToRight)
+            name.setStyleSheet("font-weight: 600;")
+            size = W.QLabel(ltr("%.2f GB" % (task["size"] / 1e9)) if task["size"] else "")
+            size.setObjectName("muted")
+            st = W.QLabel(T("ממתין"))
+            st.setObjectName("muted")
+            top.addWidget(name, 1)
+            top.addWidget(size)
+            top.addWidget(st)
+            bar = W.QProgressBar()
+            bar.setRange(0, 1000)
+            bar.setTextVisible(False)
+            bar.setFixedHeight(6)
+            rl.addLayout(top)
+            rl.addWidget(bar)
+            lay.addWidget(row)
+            self.rows[jid] = (bar, st)
+        self.manual = r.get("manual") or []
+        if self.manual:
+            ml = W.QLabel(T("את אלה אי אפשר להוריד אוטומטית (בקש מ-Claude): %s") % ", ".join(self.manual))
+            ml.setObjectName("muted")
+            ml.setWordWrap(True)
+            lay.addWidget(ml)
+        if not self.ids:
+            nl = W.QLabel(T("אין מה להוריד: הכול כבר מותקן."))
+            lay.addWidget(nl)
+        lay.addStretch(1)
+        self.done_box = W.QHBoxLayout()
+        lay.addLayout(self.done_box)
+        self.show_page(2)
+        self.next_btn.setText(T("סגור (ההורדות ממשיכות)"))
+        self.timer.start(1000)
+        self.poll()
+
+    def poll(self):
+        if not self.ids:
+            self.finish(True)
+            return
+        finished, failed = 0, 0
+        for jid in self.ids:
+            bar, st = self.rows[jid]
+            try:
+                j = client.call({"op": "get", "id": jid}, timeout=4).get("job") or {}
+            except client.BrokerDown:
+                return
+            state = j.get("state")
+            if state == "done":
+                bar.setValue(1000)
+                st.setText(T("הושלם"))
+                finished += 1
+            elif state in ("failed", "cancelled", "lost"):
+                tail = ""
+                try:
+                    tail = client.call({"op": "tail", "id": jid, "bytes": 3000}, timeout=4).get("text", "")
+                except client.BrokerDown:
+                    pass
+                lines = [l for l in tail.splitlines() if l.strip() and not l.startswith("[broker]")]
+                st.setText(T("נכשל: ") + (lines[-1][:110] if lines else state))
+                st.setStyleSheet("color: #db5c5c;")
+                finished += 1
+                failed += 1
+            elif state == "running":
+                pct = 0.0
+                try:
+                    tail = client.call({"op": "tail", "id": jid, "bytes": 2000}, timeout=4).get("text", "")
+                    m = re.findall(r"PROGRESS ([0-9.]+) (\d+) (\d+) ([0-9.]+)", tail)
+                    if m:
+                        pct = float(m[-1][0])
+                        st.setText("%.0f%%  ·  %s" % (pct, ltr("%.0f MB/s" % float(m[-1][3]))))
+                except client.BrokerDown:
+                    pass
+                bar.setValue(int(pct * 10))
+            else:
+                st.setText(T("ממתין"))
+        if finished == len(self.ids):
+            self.finish(failed == 0)
+
+    def finish(self, ok):
+        self.timer.stop()
+        if getattr(self, "finished_shown", False):
+            return
+        self.finished_shown = True
+        self.title.setText(T("ההתקנה הראשונית הושלמה") if ok else T("ההתקנה הסתיימה, חלק מההורדות נכשלו"))
+        self.sub.setText(T("עכשיו אפשר לחבר את Claude Code כדי שהסוכנים שלך ישתמשו בתור, ולבקש מ-Claude בחלון להריץ עבודות.") if ok else T("אפשר לנסות שוב מהגדרות, התקנת מודלים."))
+        self.next_btn.setText(T("סיום"))
+        self.main.settings.setValue("setup_done", True)
+        conn = W.QPushButton(T("חבר את Claude Code"))
+        conn.setIcon(icon("sparkles", "#b4b8bf", 15))
+        conn.setObjectName("tool")
+        conn.clicked.connect(lambda: (self.accept(), self.main.open_settings("claude")))
+        self.done_box.addStretch(1)
+        self.done_box.addWidget(conn)
+
+    def done(self, r):
+        self.timer.stop()
+        super().done(r)
+
+
 class Main(W.QMainWindow):
     def __init__(self, tray=True, model=None):
         super().__init__()
@@ -1778,6 +2192,7 @@ class Main(W.QMainWindow):
         self.poller.down.connect(self.on_down)
         self.poller.start()
         self.load_types()
+        QtCore.QTimer.singleShot(2500, self.maybe_first_run)
         t = QtCore.QTimer(self)
         t.timeout.connect(self.refresh_files)
         t.start(3000)
@@ -2260,6 +2675,7 @@ class Main(W.QMainWindow):
                   (T("מצב משחק / הקלטה"), "gamepad", T("מתג"), lambda: self.play.click()),
                   (T("פתח את תיקיית הפלט"), "folder", T("קבצים"), lambda: self.open_folder(None)),
                   (T("הגדרות: שפה, חיבור ל-Claude Code, הפעלה עם Windows"), "gear", T("הגדרות"), self.open_settings),
+                  (T("התקנת מודלים והתקנה ראשונית"), "download", T("הגדרות"), self.open_setup),
                   (T("הגדל טקסט"), "zoomin", "Ctrl +", lambda: self.zoom_by(0.1)),
                   (T("הקטן טקסט"), "zoomin", "Ctrl -", lambda: self.zoom_by(-0.1)),
                   (T("גודל טקסט רגיל"), "zoomin", "Ctrl 0", lambda: self.zoom_by(0, True))]
@@ -2322,8 +2738,19 @@ class Main(W.QMainWindow):
         p.move(x, y)
         p.show()
 
-    def open_settings(self):
-        SettingsDialog(self).exec()
+    def open_settings(self, tab=None):
+        SettingsDialog(self, tab).exec()
+
+    def open_setup(self):
+        SetupWizard(self).exec()
+
+    def maybe_first_run(self):
+        """A brand-new installation (no job ever ran) opens the setup once; someone who already works with the program is never interrupted (it is in Settings)."""
+        if not self.persist or self.settings.value("setup_done"):
+            return
+        r = self.api({"op": "history", "limit": 1})
+        if r and r.get("ok") and not r.get("jobs"):
+            self.open_setup()
 
     def set_language(self, code):
         """Save the language (in the broker's config, so the window, the broker and Claude agree) and open the window again."""

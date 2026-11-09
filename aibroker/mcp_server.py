@@ -244,6 +244,20 @@ def hardware_profile() -> dict:
     return _call({"op": "hardware"}, timeout=20)
 
 
+@mcp.tool()
+def list_model_packs(categories: list[str] | None = None) -> dict:
+    """The model packs this program can run (categories: image, 3d, audio, game), for THIS computer: fit (ok / tight / no), installed or not, the download size still needed,
+    licence, source page and which job types it enables. Use it before recommending or installing models; it needs no approval."""
+    return _call({"op": "packs", "categories": categories}, timeout=30)
+
+
+@mcp.tool()
+def install_model_pack(pack_ids: list[str]) -> dict:
+    """Queue the downloads of the given packs (ids from list_model_packs) as `download` jobs. Files come only from the verified official sources of the catalog and are kept only
+    when their size and SHA-256 match. Packs that cannot be downloaded automatically are returned in `manual`. The owner approves according to his permission level."""
+    return _call({"op": "install_packs", "ids": pack_ids, "requester": REQUESTER}, timeout=60)
+
+
 # The permission handler exists only for the assistant inside the AI Broker window (the window starts it with AIBROKER_ASSISTANT=1); other agents never see it.
 if os.environ.get("AIBROKER_ASSISTANT") == "1":
     import json

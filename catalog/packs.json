@@ -1,0 +1,272 @@
+{
+ "_about": "Model packs of the first-run setup. 'files' are downloadable (official URL + size + SHA-256, verified); 'detect' only says where a pack's files are when the owner installed them another way. needs.vram_min_gb comes from the job type's measured/estimated VRAM; vram_ok_gb adds room for the display and other programs. Verified 2026-11-09: sizes and SHA-256 of every 'files' entry match the official Hugging Face file list AND the copies already installed on the author's computer.",
+ "packs": [
+  {
+   "id": "acestep_music",
+   "category": "audio",
+   "title": "יצירת מוזיקה (ACE-Step 1.5)",
+   "title_en": "Music creation (ACE-Step 1.5)",
+   "what": "מלחין מוזיקת רקע בלי שירה מתיאור במילים.",
+   "what_en": "Composes background music without vocals from a description.",
+   "jobtypes": [
+    "acestep_music"
+   ],
+   "runtime": [
+    "comfyui"
+   ],
+   "needs": {
+    "vram_min_gb": 8,
+    "vram_ok_gb": 12,
+    "ram_gb": 16,
+    "disk_gb": 10
+   },
+   "license": {
+    "name": "MIT (model), Apache-2.0 (ComfyUI repack)",
+    "free_use": true
+   },
+   "source": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files",
+   "files": [
+    {
+     "root": "comfy_models",
+     "dest": "diffusion_models/acestep_v1.5_turbo.safetensors",
+     "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/diffusion_models/acestep_v1.5_turbo.safetensors",
+     "size": 4787825604,
+     "sha256": "3f6e0797fad420a39bd33979eb6e840e30989e34a3794e843d23b60ec6e422d7"
+    },
+    {
+     "root": "comfy_models",
+     "dest": "text_encoders/qwen_0.6b_ace15.safetensors",
+     "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/text_encoders/qwen_0.6b_ace15.safetensors",
+     "size": 1191588248,
+     "sha256": "fd4590c82153b8ddb67e15a2e7aaa8afa8b83a858c8a9b82a4831063156aa7a7"
+    },
+    {
+     "root": "comfy_models",
+     "dest": "text_encoders/qwen_1.7b_ace15.safetensors",
+     "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/text_encoders/qwen_1.7b_ace15.safetensors",
+     "size": 3708523360,
+     "sha256": "ed63e9247d1f55f3ace04fa11e95b085fc82d459c82c5626f0b2e37b91ebd710"
+    },
+    {
+     "root": "comfy_models",
+     "dest": "vae/ace_1.5_vae.safetensors",
+     "url": "https://huggingface.co/Comfy-Org/ace_step_1.5_ComfyUI_files/resolve/main/split_files/vae/ace_1.5_vae.safetensors",
+     "size": 337431732,
+     "sha256": "6de92e3a862acd287e08b024ac90f0783a8635451b728721a33ff03565bcb2bb"
+    }
+   ]
+  },
+  {
+   "id": "qwen_image_edit",
+   "category": "image",
+   "title": "עריכת תמונה לפי הוראה (Qwen-Image-Edit 2509)",
+   "title_en": "Edit an image from an instruction (Qwen-Image-Edit 2509)",
+   "what": "משנה תמונה קיימת לפי הוראה שכותבים במילים: צבע של בגד, רקע, הוספה או הסרה של חפץ.",
+   "what_en": "Changes an existing image from a written instruction: the colour of clothing, the background, adding or removing an object.",
+   "jobtypes": [
+    "qwen_image_edit"
+   ],
+   "runtime": [
+    "comfyui"
+   ],
+   "needs": {
+    "vram_min_gb": 9,
+    "vram_ok_gb": 13,
+    "ram_gb": 36,
+    "disk_gb": 22
+   },
+   "license": {
+    "name": "Apache-2.0",
+    "free_use": true
+   },
+   "source": "https://huggingface.co/nunchaku-tech/nunchaku-qwen-image-edit-2509",
+   "note": "דורש את ComfyUI-nunchaku (ההתקנה לא בודקת אותו).",
+   "note_en": "Needs the ComfyUI-nunchaku custom node (the setup does not check it).",
+   "files": [
+    {
+     "root": "comfy_models",
+     "dest": "diffusion_models/nunchaku/svdq-fp4_r32-qwen-image-edit-2509-lightningv2.0-4steps.safetensors",
+     "url": "https://huggingface.co/nunchaku-tech/nunchaku-qwen-image-edit-2509/resolve/main/svdq-fp4_r32-qwen-image-edit-2509-lightningv2.0-4steps.safetensors",
+     "size": 11948923656,
+     "sha256": "bd58dea58814f546e3ba5e13af072d353bb2276525564bf49337c5cd506cf9be"
+    },
+    {
+     "root": "comfy_models",
+     "dest": "text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+     "url": "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/text_encoders/qwen_2.5_vl_7b_fp8_scaled.safetensors",
+     "size": 9384670680,
+     "sha256": "cb5636d852a0ea6a9075ab1bef496c0db7aef13c02350571e388aea959c5c0b4"
+    },
+    {
+     "root": "comfy_models",
+     "dest": "vae/qwen_image_vae.safetensors",
+     "url": "https://huggingface.co/Comfy-Org/Qwen-Image_ComfyUI/resolve/main/split_files/vae/qwen_image_vae.safetensors",
+     "size": 253806246,
+     "sha256": "a70580f0213e67967ee9c95f05bb400e8fb08307e017a924bf3441223e023d1f"
+    }
+   ]
+  },
+  {
+   "id": "zimage_turbo",
+   "category": "image",
+   "title": "יצירת תמונה מטקסט (Z-Image Turbo)",
+   "title_en": "Text to image (Z-Image Turbo)",
+   "what": "מצייר תמונה חדשה מתיאור במילים, מהר.",
+   "what_en": "Draws a new image from a description, fast.",
+   "jobtypes": [
+    "zimage_t2i"
+   ],
+   "runtime": [
+    "comfyui"
+   ],
+   "needs": {
+    "vram_min_gb": 9,
+    "vram_ok_gb": 13,
+    "ram_gb": 14,
+    "disk_gb": 10
+   },
+   "license": {
+    "name": "Apache-2.0 (base model)",
+    "free_use": true
+   },
+   "source": "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo",
+   "manual": "ההרצה משתמשת בקובץ מאוחד (checkpoints/z-image/z-image-turbo-fp8-aio.safetensors). הוא לא מוצע להורדה אוטומטית כי העותקים ב-Hugging Face הם העלאות של הקהילה; הקבצים הרשמיים המפוצלים נמצאים ב-Comfy-Org/z_image_turbo.",
+   "manual_en": "The runner uses the all-in-one checkpoint checkpoints/z-image/z-image-turbo-fp8-aio.safetensors. It is not offered as an automatic download because the copies on Hugging Face are community re-uploads; the official split files are in Comfy-Org/z_image_turbo.",
+   "detect": [
+    {
+     "root": "comfy_models",
+     "dest": "checkpoints/z-image/z-image-turbo-fp8-aio.safetensors"
+    }
+   ]
+  },
+  {
+   "id": "triposg",
+   "category": "3d",
+   "title": "דגם תלת-ממד מתמונה (TripoSG)",
+   "title_en": "3D model from an image (TripoSG)",
+   "what": "הופך תמונה של חפץ או דמות לדגם תלת-ממדי גולמי.",
+   "what_en": "Turns a picture of an object or a character into a raw 3D model.",
+   "jobtypes": [
+    "triposg_shape"
+   ],
+   "runtime": [],
+   "needs": {
+    "vram_min_gb": 7,
+    "vram_ok_gb": 11,
+    "ram_gb": 7,
+    "disk_gb": 8
+   },
+   "license": {
+    "name": "MIT",
+    "free_use": true
+   },
+   "source": "https://huggingface.co/VAST-AI/TripoSG",
+   "manual": "רץ בסביבת הפייתון של המעבדה. בקש מ-Claude להתקין את זה על המחשב שלך.",
+   "manual_en": "Runs in the lab's own Python environment; ask Claude to set it up for your computer."
+  },
+  {
+   "id": "step1x_shape",
+   "category": "3d",
+   "title": "דגם תלת-ממד, מודל שני (Step1X-3D)",
+   "title_en": "3D model, second model (Step1X-3D)",
+   "what": "אותה מטרה כמו TripoSG עם מודל אחר, להשוואה.",
+   "what_en": "The same job as TripoSG with another model, for comparison.",
+   "jobtypes": [
+    "step1x_shape"
+   ],
+   "runtime": [],
+   "needs": {
+    "vram_min_gb": 10,
+    "vram_ok_gb": 14,
+    "ram_gb": 10,
+    "disk_gb": 8
+   },
+   "license": {
+    "name": "Apache-2.0",
+    "free_use": true
+   },
+   "source": "https://huggingface.co/stepfun-ai/Step1X-3D",
+   "manual": "רץ בסביבת הפייתון של המעבדה. בקש מ-Claude להתקין את זה על המחשב שלך.",
+   "manual_en": "Runs in the lab's own Python environment; ask Claude to set it up for your computer."
+  },
+  {
+   "id": "blender_tools",
+   "category": "3d",
+   "title": "ניקוי ואפיית פרטים לדגמים (Blender)",
+   "title_en": "Cleaning and detail baking for models (Blender)",
+   "what": "מקטין דגם כבד, מנקה אותו ומעביר אליו את הפרטים, כדי שיתאים למשחק.",
+   "what_en": "Reduces a heavy model, cleans it and moves its details onto it, so it suits a game.",
+   "jobtypes": [
+    "blender_script",
+    "blender_bake",
+    "glb_preview"
+   ],
+   "runtime": [
+    "blender"
+   ],
+   "needs": {
+    "ram_gb": 6,
+    "disk_gb": 1
+   },
+   "license": {
+    "name": "GPL (Blender itself; you only run it)",
+    "free_use": true
+   },
+   "source": "https://www.blender.org/download/",
+   "manual": "להתקין את Blender (blender.org) ולהגדיר את הנתיב שלו ב-config.json (vars.blender).",
+   "manual_en": "Install Blender (blender.org) and set its path in config.json (vars.blender)."
+  },
+  {
+   "id": "moss_sound",
+   "category": "audio",
+   "title": "יצירת צלילים ואפקטים (MOSS)",
+   "title_en": "Sound effects and voices (MOSS)",
+   "what": "מייצר אפקטים וקולות לפי סקריפט.",
+   "what_en": "Makes sound effects and voices from a script.",
+   "jobtypes": [
+    "moss_sound"
+   ],
+   "runtime": [],
+   "needs": {
+    "vram_min_gb": 5,
+    "vram_ok_gb": 9,
+    "ram_gb": 8,
+    "disk_gb": 12
+   },
+   "license": {
+    "name": "Apache-2.0",
+    "free_use": true
+   },
+   "source": "https://huggingface.co/OpenMOSS-Team/MOSS-SoundEffect-v2.0",
+   "manual": "רץ בסביבת הפייתון של המעבדה. בקש מ-Claude להתקין את זה על המחשב שלך.",
+   "manual_en": "Runs in the lab's own Python environment; ask Claude to set it up for your computer."
+  },
+  {
+   "id": "game_tests",
+   "category": "game",
+   "title": "בדיקות משחק ברקע (Godot)",
+   "title_en": "Game tests in the background (Godot)",
+   "what": "מריץ את המשחק בלי חלון, או על שולחן עבודה נסתר, ומצלם ממנו תמונות וסרטונים.",
+   "what_en": "Runs the game without a window, or on a hidden desktop, and takes pictures and videos.",
+   "jobtypes": [
+    "godot_sim",
+    "godot_shots",
+    "godot_film"
+   ],
+   "runtime": [],
+   "needs": {
+    "vram_min_gb": 3,
+    "vram_ok_gb": 6,
+    "ram_gb": 5,
+    "disk_gb": 1
+   },
+   "license": {
+    "name": "MIT (Godot)",
+    "free_use": true
+   },
+   "source": "https://godotengine.org/download/",
+   "manual": "דורש את פרויקט המשחק ואת Godot; בקש מ-Claude להתקין.",
+   "manual_en": "Needs the game project and Godot; ask Claude to set it up."
+  }
+ ]
+}
