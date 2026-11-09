@@ -143,7 +143,7 @@ Every second the broker walks the queue in order and starts a job when all of th
 | Start with the computer | Startup shortcut | launch agent | autostart entry |
 | Launcher | `AI_Broker.bat` | `AI_Broker.command` | `AI_Broker.command` |
 
-Windows is what the author uses every day. The macOS and Linux parts are written and covered by automated tests that run on GitHub's own Windows, macOS and Linux machines for every change (see the *tests* workflow), but nobody has used them on a real Mac yet: expect rough edges and please open an issue. There is no commit charge or peak-commit counter outside Windows, so the broker uses resident memory instead. The model packs list which systems each model supports (for example the CUDA models are Windows / Linux only); on a Mac the language-model pack (Ollama) is the one that works out of the box.
+Windows is what the author uses every day. The macOS and Linux parts are written and covered by automated tests that run on GitHub's own Windows, macOS and Linux machines for every change (see the *tests* workflow), and the double-click launchers are run from a clean checkout on all three (they create the private environment, install, start the window and the service). But nobody has used the program by hand on a real Mac yet: expect rough edges and please open an issue. There is no commit charge or peak-commit counter outside Windows, so the broker uses resident memory instead. The model packs list which systems each model supports (for example the CUDA models are Windows / Linux only); on a Mac the language-model pack (Ollama) is the one that works out of the box.
 
 ## Limits
 
