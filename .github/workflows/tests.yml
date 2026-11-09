@@ -15,6 +15,7 @@ jobs:
     env:
       QT_QPA_PLATFORM: offscreen
       PYTHONUTF8: "1"
+      AIBROKER_LANG: he          # the tests were written against the Hebrew window
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

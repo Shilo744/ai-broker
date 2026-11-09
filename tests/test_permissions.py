@@ -3,6 +3,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ["AIBROKER_LANG"] = "he"          # the descriptions are checked in Hebrew whatever language the computer uses
 from aibroker import permissions as P
 
 OWNER_CMD = ("Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}, @{n='UsedGB';e={[math]::Round($_.Used/1GB,1)}}; "
