@@ -1,0 +1,4 @@
+#!/bin/sh
+# The command line of the AI Broker on macOS / Linux (the same as aijob.bat):  bin/aijob status
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
+PYTHONPATH="$HERE" exec "$HERE/.venv/bin/python" -m aibroker "$@"

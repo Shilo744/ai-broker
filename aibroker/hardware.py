@@ -1,13 +1,15 @@
 """What this computer can do: graphics card, memory, disks and the programs the models need. Read-only and fast (about a second).
 Used by the assistant (the `hardware_profile` tool, so it never needs a shell command to look at the machine) and by the setup wizard."""
+import json
 import os
 import platform
 import shutil
 import subprocess
+import sys
 
 import psutil
 
-from . import paths, winutil
+from . import osutil, paths
 
 GB = 1024.0 ** 3
 
@@ -15,18 +17,47 @@ GB = 1024.0 ** 3
 def _gpu():
     try:
         r = subprocess.run(["nvidia-smi", "--query-gpu=name,memory.total,memory.used,driver_version,compute_cap", "--format=csv,noheader,nounits"],
-                           capture_output=True, text=True, timeout=6, creationflags=winutil.NO_WINDOW)
+                           capture_output=True, text=True, timeout=6, creationflags=osutil.NO_WINDOW)
         out = []
         for line in r.stdout.strip().splitlines():
             a = [x.strip() for x in line.split(",")]
             out.append({"name": a[0], "vram_gb": round(float(a[1]) / 1024.0, 1), "vram_used_gb": round(float(a[2]) / 1024.0, 1),
                         "driver": a[3] if len(a) > 3 else "", "compute_capability": a[4] if len(a) > 4 else ""})
-        return out
+        if out:
+            return out
+    except Exception:
+        pass
+    return _apple_gpu() if sys.platform == "darwin" else []
+
+
+def _apple_gpu():
+    """Apple Silicon: the graphics chip uses the computer's own memory ('unified'), so its memory is the RAM. Reported as one GPU with unified=True."""
+    try:
+        r = subprocess.run(["system_profiler", "SPDisplaysDataType", "-json"], capture_output=True, text=True, timeout=15)
+        d = (json.loads(r.stdout).get("SPDisplaysDataType") or [{}])[0]
+        name = d.get("sppci_model") or d.get("_name") or "Apple GPU"
+        if "apple" not in name.lower():
+            return []                                   # an Intel Mac with a discrete card: no Metal budget we can measure
+        ram = psutil.virtual_memory().total / GB
+        return [{"name": name, "vram_gb": round(ram, 1), "vram_used_gb": 0.0, "driver": "Metal", "compute_capability": "", "unified": True}]
     except Exception:
         return []
 
 
 def _cpu_name():
+    if sys.platform == "darwin":
+        try:
+            return subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True, text=True, timeout=5).stdout.strip() or platform.processor()
+        except Exception:
+            return platform.processor()
+    if sys.platform.startswith("linux"):
+        try:
+            for line in open("/proc/cpuinfo", encoding="utf-8"):
+                if line.lower().startswith("model name"):
+                    return line.split(":", 1)[1].strip()
+        except OSError:
+            pass
+        return platform.processor()
     try:
         import winreg
         with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as k:
@@ -40,6 +71,8 @@ def _disks():
     for p in psutil.disk_partitions(all=False):
         if "cdrom" in p.opts or not p.fstype:
             continue
+        if p.mountpoint.startswith("/System/Volumes/") and p.mountpoint != "/System/Volumes/Data":
+            continue                                     # macOS system helper volumes
         try:
             u = psutil.disk_usage(p.mountpoint)
         except OSError:
@@ -66,7 +99,9 @@ def _software():
         return str(v) if v and os.path.exists(str(v)) else None
 
     blender = given("blender") or _which("blender")
-    if not blender:
+    if not blender and sys.platform == "darwin" and os.path.exists("/Applications/Blender.app/Contents/MacOS/Blender"):
+        blender = "/Applications/Blender.app/Contents/MacOS/Blender"
+    if not blender and sys.platform == "win32":
         base = os.path.join(os.environ.get("ProgramFiles", r"C:\Program Files"), "Blender Foundation")
         if os.path.isdir(base):
             for d in sorted(os.listdir(base), reverse=True):
@@ -80,11 +115,11 @@ def _software():
         root = os.path.dirname(os.path.dirname(comfy_py))
         comfy = root if os.path.isdir(os.path.join(root, "ComfyUI")) else os.path.dirname(comfy_py)
     return {"blender": blender, "git": _which("git"), "python": given("py_sys") or _which("python", "py"), "ffmpeg": _which("ffmpeg"), "claude_code": _which("claude"),
-            "comfyui": comfy, "nvidia_smi": _which("nvidia-smi")}
+            "comfyui": comfy, "nvidia_smi": _which("nvidia-smi"), "ollama": _which("ollama")}
 
 
 def profile():
-    mem = winutil.mem_status()
+    mem = osutil.mem_status()
     cfg = paths.load_config()
     out_root = cfg.get("output_root") or str(paths.ROOT / "output")
     try:
@@ -95,6 +130,8 @@ def profile():
     return {
         "ok": True,
         "os": platform.platform(),
+        "platform": {"win32": "windows", "darwin": "macos"}.get(sys.platform, "linux"),
+        "unified_memory": bool(gpus and gpus[0].get("unified")),
         "cpu": {"name": _cpu_name(), "cores": psutil.cpu_count(logical=False), "threads": psutil.cpu_count(logical=True)},
         "ram_gb": round(mem["ram_total"], 1),
         "ram_free_gb": round(mem["ram_avail"], 1),

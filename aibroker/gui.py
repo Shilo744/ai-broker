@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt
 
 from . import i18n
 from .i18n import T
-from . import assistant, catalog, client, paths, permissions, system
+from . import assistant, catalog, client, osutil, paths, permissions, system
 from .theme import QSS, SYMBOL_ICON, dot_icon, icon, icon_pixmap, logo_pixmap, make_icon, qss, save_ico, style_titlebar, sym_icon, symbol_pixmap
 from .kit import (Bar, Chip, Dot, FlowLayout, Gauge, MessageView, MiniGauge, ModelDelegate, NoticeBar, Palette, ROLE_COUNT, ROLE_KIND, ROLE_RUN, ROLE_WAIT, Seg, TaskWidget, ToolHeader, tool_button)
 
@@ -340,7 +340,7 @@ class SettingsDialog(W.QDialog):
     def toggle_autostart(self, on):
         ok = system.set_autostart(on)
         if not ok and on:
-            W.QMessageBox.warning(self, T("הפעלה עם Windows"), T("לא הצלחתי ליצור את הקיצור בתיקיית ההפעלה."))
+            W.QMessageBox.warning(self, T("הפעלה עם המחשב"), T("לא הצלחתי ליצור את הקיצור בתיקיית ההפעלה."))
 
     def on_conn(self, state):
         self.connected = state
@@ -431,11 +431,11 @@ class SettingsDialog(W.QDialog):
         note.setWordWrap(True)
         g.addWidget(note)
         head(g, T("הפעלה"))
-        self.auto = W.QCheckBox(T("להפעיל את התוכנה עם Windows (תעלה בשקט באזור ההודעות)"))
+        self.auto = W.QCheckBox(T("להפעיל את התוכנה עם הפעלת המחשב (תעלה בשקט באזור ההודעות)"))
         self.auto.setChecked(system.autostart_enabled())
         self.auto.toggled.connect(self.toggle_autostart)
         g.addWidget(self.auto)
-        c = W.QCheckBox(T("הודעה של Windows כשעבודה מסתיימת"))
+        c = W.QCheckBox(T("הודעה על המסך כשעבודה מסתיימת"))
         c.setChecked(bool(parent.state and parent.state["flags"].get("toast")))
         c.toggled.connect(lambda on: parent.api({"op": "limits", "flags": {"toast": on}}))
         g.addWidget(c)
@@ -449,10 +449,10 @@ class SettingsDialog(W.QDialog):
         head(g, T("תיקיות"))
         frow = W.QHBoxLayout()
         b = W.QPushButton(T("פתח את תיקיית הפלט"))
-        b.clicked.connect(lambda: os.startfile(parent.output_root))
+        b.clicked.connect(lambda: osutil.open_path(parent.output_root))
         frow.addWidget(b)
         b = W.QPushButton(T("פתח את תיקיית הנתונים"))
-        b.clicked.connect(lambda: os.startfile(str(paths.HOME)))
+        b.clicked.connect(lambda: osutil.open_path(str(paths.HOME)))
         frow.addWidget(b)
         frow.addStretch(1)
         g.addLayout(frow)
@@ -567,7 +567,7 @@ def kv_row(label, text, mono=False, width=46, key=False):
     k.setObjectName("muted")
     if key:
         k.setLayoutDirection(Qt.LeftToRight)
-        k.setStyleSheet("font-family: Consolas; font-size: 9.5pt; color: #b4b8bf;")
+        k.setStyleSheet("font-family: Consolas, Menlo, monospace; font-size: 9.5pt; color: #b4b8bf;")
     k.setFixedWidth(width)
     k.setAlignment(Qt.AlignTop | Qt.AlignRight)
     v = W.QLabel(text)
@@ -575,7 +575,7 @@ def kv_row(label, text, mono=False, width=46, key=False):
     v.setTextInteractionFlags(Qt.TextSelectableByMouse)
     if mono:
         v.setLayoutDirection(Qt.LeftToRight)
-        v.setStyleSheet("font-family: Consolas; font-size: 9.5pt; color: #b4b8bf; background: #1e1f22; border-radius: 4px; padding: 4px 8px;")
+        v.setStyleSheet("font-family: Consolas, Menlo, monospace; font-size: 9.5pt; color: #b4b8bf; background: #1e1f22; border-radius: 4px; padding: 4px 8px;")
     h.addWidget(k)
     h.addWidget(v, 1)
     return h
@@ -668,7 +668,7 @@ class Thumb(W.QLabel):
             if self.on_click:
                 self.on_click()
             else:
-                os.startfile(self.path)
+                osutil.open_path(self.path)
 
 
 
@@ -698,9 +698,9 @@ class TurntableDialog(W.QDialog):
         v.addWidget(hint)
         row = W.QHBoxLayout()
         b = W.QPushButton(T("פתח את הקובץ"))
-        b.clicked.connect(lambda: os.startfile(self.glb))
+        b.clicked.connect(lambda: osutil.open_path(self.glb))
         c = W.QPushButton(T("פתח תיקייה"))
-        c.clicked.connect(lambda: os.startfile(str(Path(self.glb).parent)))
+        c.clicked.connect(lambda: osutil.open_path(str(Path(self.glb).parent)))
         row.addWidget(b)
         row.addWidget(c)
         row.addStretch(1)
@@ -877,7 +877,7 @@ class ChatPanel(W.QFrame):
         self.edit = W.QPlainTextEdit()
         self.edit.setFixedHeight(58)
         self.edit.setLayoutDirection(Qt.LeftToRight)
-        self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #dfe1e5; font-family: 'Segoe UI'; font-size: 10.5pt; }")
+        self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #dfe1e5; font-family: 'Segoe UI', 'Helvetica Neue', Arial; font-size: 10.5pt; }")
         self.edit.setPlaceholderText(T("כתוב כאן מה לעשות…"))
         self.edit.installEventFilter(self)
         cl.addWidget(self.edit)
@@ -1249,7 +1249,7 @@ class ChatPanel(W.QFrame):
                     box.setWordWrap(True)
                     box.setLayoutDirection(Qt.LeftToRight)
                     box.setTextInteractionFlags(Qt.TextSelectableByMouse)
-                    box.setStyleSheet("font-family: Consolas; font-size: 9pt; color: #db5c5c; background: #1e1f22; border-radius: 4px; padding: 6px 8px;")
+                    box.setStyleSheet("font-family: Consolas, Menlo, monospace; font-size: 9pt; color: #db5c5c; background: #1e1f22; border-radius: 4px; padding: 6px 8px;")
                     a.lay.addWidget(box)
             elif st == "cancelled":
                 a.text(T("העבודה בוטלה."), muted=True)
@@ -1258,7 +1258,7 @@ class ChatPanel(W.QFrame):
         if st in ("done", "failed", "cancelled"):
             row.addWidget(self.act_button("refresh", T("הרץ שוב"), lambda _=False, i=j["id"]: m.rerun_job(i), T("אותן הגדרות, תיקייה חדשה")))
             if j.get("outdir"):
-                row.addWidget(self.act_button("folder", T("תיקייה"), lambda _=False, d=j["outdir"]: os.startfile(d) if os.path.isdir(d) else None))
+                row.addWidget(self.act_button("folder", T("תיקייה"), lambda _=False, d=j["outdir"]: osutil.open_path(d) if os.path.isdir(d) else None))
             if images:
                 row.addWidget(self.act_button("arrow", T("שלח אל…"), lambda _=False, p=images[0]: m.send_menu(p, QtGui.QCursor.pos()), T("המשך עם התמונה במודל אחר")))
             if st == "failed":
@@ -1341,7 +1341,7 @@ class AssistantPanel(W.QFrame):
         self.edit = W.QPlainTextEdit()
         self.edit.setFixedHeight(62)
         self.edit.setPlaceholderText(T("כתוב לעוזר…  (Enter לשליחה)"))
-        self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #dfe1e5; font-family: 'Segoe UI'; font-size: 10.5pt; }")
+        self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #dfe1e5; font-family: 'Segoe UI', 'Helvetica Neue', Arial; font-size: 10.5pt; }")
         self.edit.installEventFilter(self)
         cl.addWidget(self.edit)
         row = W.QHBoxLayout()
@@ -1509,7 +1509,7 @@ class AssistantPanel(W.QFrame):
             box.setReadOnly(True)
             box.setLayoutDirection(Qt.LeftToRight)
             box.setFixedHeight(min(190, 26 + 17 * (detail.count("\n") + 1 + len(detail) // 62)))
-            box.setStyleSheet("QPlainTextEdit { background: #1e1f22; border: 1px solid #393b40; border-radius: 4px; color: #b4b8bf; font-family: Consolas; font-size: 9.5pt; }")
+            box.setStyleSheet("QPlainTextEdit { background: #1e1f22; border: 1px solid #393b40; border-radius: 4px; color: #b4b8bf; font-family: Consolas, Menlo, monospace; font-size: 9.5pt; }")
             box.setVisible(False)
             toggle.toggled.connect(lambda on, bx=box, tg=toggle: (bx.setVisible(on), tg.setText(T("הסתר את הפקודה") if on else T("הצג את הפקודה"))))
             row0 = W.QHBoxLayout()
@@ -2568,7 +2568,7 @@ class Main(W.QMainWindow):
         if path.lower().endswith(".glb") and glb_frames(path):
             TurntableDialog(self, path).exec()
         else:
-            os.startfile(path)
+            osutil.open_path(path)
 
     def request_preview(self, glb):
         if glb in self.preview_asked:
@@ -2609,7 +2609,7 @@ class Main(W.QMainWindow):
     def open_folder(self, od):
         d = Path(self.output_root) / od if od else Path(self.output_root)
         d.mkdir(parents=True, exist_ok=True)
-        os.startfile(str(d))
+        osutil.open_path(str(d))
 
     def dragEnterEvent(self, e):
         if e.mimeData().hasUrls():
@@ -2670,7 +2670,7 @@ class Main(W.QMainWindow):
             if cfg.get("file"):
                 m.addAction(sym_icon(g["sym"], g["color"], 16), "%s   ·   %s" % (cfg.get("send_label") or g["title"], g["title"]), lambda od=g["dir"], p_=path: self.send_to(od, p_))
         m.addSeparator()
-        m.addAction(icon("folder", "#b4b8bf", 16), T("פתח את התמונה"), lambda: os.startfile(path))
+        m.addAction(icon("folder", "#b4b8bf", 16), T("פתח את התמונה"), lambda: osutil.open_path(path))
         m.addAction(icon("copy", "#b4b8bf", 16), T("העתק נתיב"), lambda: W.QApplication.clipboard().setText(path))
         m.exec(pos or QtGui.QCursor.pos())
 
@@ -2689,7 +2689,7 @@ class Main(W.QMainWindow):
         items += [(T("המשך את כל העבודות") if paused else T("עצור את כל העבודות"), "play" if paused else "pause", T("תור"), lambda: self.pause.click()),
                   (T("מצב משחק / הקלטה"), "gamepad", T("מתג"), lambda: self.play.click()),
                   (T("פתח את תיקיית הפלט"), "folder", T("קבצים"), lambda: self.open_folder(None)),
-                  (T("הגדרות: שפה, חיבור ל-Claude Code, הפעלה עם Windows"), "gear", T("הגדרות"), self.open_settings),
+                  (T("הגדרות: שפה, חיבור ל-Claude Code, הפעלה עם המחשב"), "gear", T("הגדרות"), self.open_settings),
                   (T("התקנת מודלים והתקנה ראשונית"), "download", T("הגדרות"), self.open_setup),
                   (T("הגדל טקסט"), "zoomin", "Ctrl +", lambda: self.zoom_by(0.1)),
                   (T("הקטן טקסט"), "zoomin", "Ctrl -", lambda: self.zoom_by(-0.1)),
@@ -2706,7 +2706,7 @@ class Main(W.QMainWindow):
         self.model_list.setCurrentRow(0)          # the assistant is the first entry of the list
 
     def perm_alert(self, p):
-        """Claude is waiting for a click. The question itself is in the chat; a Windows balloon is shown only when the window is hidden or minimized, and at most once a minute."""
+        """Claude is waiting for a click. The question itself is in the chat; a desktop balloon is shown only when the window is hidden or minimized, and at most once a minute."""
         hidden = (not self.isVisible()) or self.isMinimized()
         if self.tray and hidden and time.time() - getattr(self, "_perm_balloon", 0) > 60:
             self._perm_balloon = time.time()
@@ -2777,7 +2777,7 @@ class Main(W.QMainWindow):
         import subprocess
         env = dict(os.environ, AIBROKER_LANG=code)
         subprocess.Popen([sys.executable, "-m", "aibroker.gui"] + args, cwd=str(paths.ROOT), env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         creationflags=0x08000000 | 0x00000008)
+                         creationflags=osutil.NO_WINDOW | osutil.DETACHED, **osutil.SESSION)
         self.quitting = True
         self.close()
         W.QApplication.quit()
@@ -2925,7 +2925,7 @@ class Main(W.QMainWindow):
     def open_model_folder(self):
         d = self.model_folder()
         d.mkdir(parents=True, exist_ok=True)
-        os.startfile(str(d))
+        osutil.open_path(str(d))
 
     def scan_files(self, limit=150):
         out = []
@@ -3010,8 +3010,8 @@ class Main(W.QMainWindow):
         if fp == "__new__":
             return
         m = W.QMenu(self)
-        m.addAction(T("פתח"), lambda: os.startfile(fp))
-        m.addAction(T("פתח את תיקיית העבודה"), lambda: os.startfile(str(Path(fp).parent)))
+        m.addAction(T("פתח"), lambda: osutil.open_path(fp))
+        m.addAction(T("פתח את תיקיית העבודה"), lambda: osutil.open_path(str(Path(fp).parent)))
         m.addAction(T("העתק נתיב"), lambda: W.QApplication.clipboard().setText(fp))
         if Path(fp).suffix.lower() in IMG:
             m.addAction(icon("arrow", "#b4b8bf", 16), T("שלח אל…"), lambda: self.send_menu(fp, QtGui.QCursor.pos()))
@@ -3043,7 +3043,7 @@ class Main(W.QMainWindow):
     def hist_open(self, item):
         r = item.row()
         if r < len(self.hist_jobs) and self.hist_jobs[r].get("outdir") and os.path.isdir(self.hist_jobs[r]["outdir"]):
-            os.startfile(self.hist_jobs[r]["outdir"])
+            osutil.open_path(self.hist_jobs[r]["outdir"])
 
     # ------------------------------------------------------------ state
     def on_down(self, msg):
@@ -3286,7 +3286,7 @@ def main(argv=None):
         win.resize(*[int(x) for x in size.lower().split("x")])
     win.tabs.setCurrentIndex(tab)
     if "--hidden" in argv and win.tray:
-        pass                                    # started with Windows: stay in the tray, the service is running
+        pass                                    # started with the computer: stay in the tray, the service is running
     else:
         win.show()
     if "--assistant" in argv:

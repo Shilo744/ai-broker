@@ -2,7 +2,7 @@
 
 [English: README.md](README.md)
 
-**תור אחד לכל עבודות ה-AI הכבדות במחשב Windows.** מודלים של תמונה ותלת-ממד, Blender, מוזיקה וצלילים, בדיקות משחק: אתה והסוכנים של Claude Code שולחים עבודות לאותו מקום, והתוכנה מריצה במקביל כמה שיותר עבודות שנכנסות במגבלות ה-RAM וה-GPU, לומדת כמה כל עבודה באמת לוקחת, ונסוגה כשאתה משחק או מקליט.
+**תור אחד לכל עבודות ה-AI הכבדות במחשב שלך (Windows; macOS ו-Linux ניסיוני).** מודלים של תמונה ותלת-ממד, Blender, מוזיקה וצלילים, בדיקות משחק: אתה והסוכנים של Claude Code שולחים עבודות לאותו מקום, והתוכנה מריצה במקביל כמה שיותר עבודות שנכנסות במגבלות ה-RAM וה-GPU, לומדת כמה כל עבודה באמת לוקחת, ונסוגה כשאתה משחק או מקליט.
 
 ![החלון](docs/screenshots/window-en.png)
 
@@ -24,7 +24,7 @@
 
 ## דרישות
 
-- Windows 10 או 11 (שליטה בזיכרון, ב-GPU ובתהליכים דרך ממשקי Windows; macOS ו-Linux עדיין לא נתמכים)
+- Windows 10 או 11 (המערכת של המחבר, בשימוש יומיומי), או macOS / Linux (ניסיוני, ראה [פלטפורמות](#פלטפורמות))
 - Python 3.12
 - כרטיס NVIDIA עם `nvidia-smi` לתזמון לפי VRAM (בלעדיו הכול עובד, רק VRAM לא נמדד)
 - [Claude Code](https://claude.com/claude-code) לעוזר שבתוך החלון ולכלי ה-MCP (לא חובה)
@@ -33,11 +33,14 @@
 
 ## התחלה מהירה
 
-דרוש Windows ו-[Python 3.10 ומעלה](https://www.python.org/downloads/windows/) (לסמן "Add python.exe to PATH"). מורידים את הריפו (כפתור **Code** הירוק > **Download ZIP**, או `git clone https://github.com/Shilo744/ai-broker.git`) ו**לוחצים פעמיים על `AI_Broker.bat`**.
+מורידים את הריפו (כפתור **Code** הירוק > **Download ZIP**, או `git clone https://github.com/Shilo744/ai-broker.git`), ואז:
+
+- **Windows:** מתקינים [Python 3.10 ומעלה](https://www.python.org/downloads/windows/) (לסמן "Add python.exe to PATH") ו**לוחצים פעמיים על `AI_Broker.bat`**.
+- **macOS / Linux:** מתקינים Python 3.10 ומעלה ([python.org](https://www.python.org/downloads/) או `brew install python@3.12`) ו**לוחצים פעמיים על `AI_Broker.command`** (במאק, אם הוא מסרב להיפתח: קליק ימני > Open פעם אחת, או `bash AI_Broker.command` בטרמינל).
 
 בפעם הראשונה הוא יוצר תיקיית `.venv` פרטית לידו ומתקין את החבילות (כמה דקות, צריך אינטרנט). מהפעם השנייה הוא נפתח מיד. החלון נפתח ומפעיל את השירות ברקע (הוא ממשיך לרוץ כשסוגרים את החלון). נתונים ויומנים ב-`%LOCALAPPDATA%\ai-broker`.
 
-חיבור Claude Code (לא חובה): **הגדרות (גלגל שיניים) > Claude > חבר את Claude Code**, או `register.bat`. זה מוסיף את שרת ה-MCP למשתמש ה-Windows שלך ומעתיק את קובץ ההוראות. פותחים סשן חדש של Claude Code ושואלים ״מה יש בתור ה-AI?״. `unregister.bat` מסיר.
+חיבור Claude Code (לא חובה): **הגדרות (גלגל שיניים) > Claude > חבר את Claude Code**, או `register.bat` (`register.command` במאק ובלינוקס). זה מוסיף את שרת ה-MCP למשתמש ה-Windows שלך ומעתיק את קובץ ההוראות. פותחים סשן חדש של Claude Code ושואלים ״מה יש בתור ה-AI?״. `unregister.bat` מסיר.
 
 ## שימוש
 
@@ -69,11 +72,15 @@ bin\aijob.bat limits --ram-gb 50
 
 ## הגדרות
 
-`%LOCALAPPDATA%\ai-broker\config.json` (אפשר לשנות גם מהחלון וגם עם `aijob limits`): `limits.ram_gb` ו-`limits.vram_gb` (תקציב לסכום העבודות שרצות), `limits.max_jobs`, `limits.reserve_ram_gb`, `limits.disk_busy_pct`, `lang` (`he` או `en`), `assistant_level` (`careful`, `normal`, `free`). משתני סביבה: `AIBROKER_HOME`, `AIBROKER_PORT` (ברירת מחדל 47600, רק localhost), `AIBROKER_LANG`.
+`%LOCALAPPDATA%\ai-broker\config.json` (במאק `~/Library/Application Support/ai-broker`, בלינוקס `~/.local/share/ai-broker`; אפשר לשנות גם מהחלון וגם עם `aijob limits`): `limits.ram_gb` ו-`limits.vram_gb` (תקציב לסכום העבודות שרצות), `limits.max_jobs`, `limits.reserve_ram_gb`, `limits.disk_busy_pct`, `lang` (`he` או `en`), `assistant_level` (`careful`, `normal`, `free`). משתני סביבה: `AIBROKER_HOME`, `AIBROKER_PORT` (ברירת מחדל 47600, רק localhost), `AIBROKER_LANG`.
+
+## פלטפורמות
+
+Windows היא המערכת שהמחבר משתמש בה כל יום. החלקים של macOS ו-Linux כתובים ומכוסים בבדיקות אוטומטיות שרצות ב-GitHub על מחשבי Windows, macOS ו-Linux אמיתיים בכל שינוי, אבל עוד אף אחד לא השתמש בהם על מאק אמיתי: צפויים קצוות לא מלוטשים, ואפשר לפתוח issue. מחוץ ל-Windows אין מונה commit, אז נמדד זיכרון בשימוש; ואין מדידה של "מי תופס את ה-GPU" (ב-Linux עם NVIDIA כן). בחבילות המודלים רשום על אילו מערכות כל מודל עובד (מודלי CUDA רק ב-Windows ו-Linux). במאק, חבילת מודל השפה (Ollama) היא זו שעובדת מיד.
 
 ## מה לא
 
-Windows בלבד. השירות מאזין ל-localhost בלי הזדהות (כל תהליך של משתמש ה-Windows שלך יכול לשלוח עבודות). אין בידוד אמיתי של VRAM: התכנון לפי הערכות ומדידות. אם השירות עצמו קורס, עבודות שרצו ממשיכות, אבל קוד היציאה שלהן אובד.
+השירות מאזין ל-localhost בלי הזדהות (כל תהליך של המשתמש שלך יכול לשלוח עבודות). אין בידוד אמיתי של VRAM: התכנון לפי הערכות ומדידות. אם השירות עצמו קורס, עבודות שרצו ממשיכות, אבל קוד היציאה שלהן אובד.
 
 הרישיון: [MIT](LICENSE).
 

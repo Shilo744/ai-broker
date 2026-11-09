@@ -8,7 +8,7 @@ import sandbox
 os.environ["AIBROKER_PORT"] = "47697"
 from PySide6 import QtWidgets as W, QtCore
 from PySide6.QtCore import Qt
-from aibroker import client, gui, paths, i18n
+from aibroker import client, gui, osutil, paths, i18n
 sys.excepthook = lambda *a: (traceback.print_exception(*a), sys.stdout.flush())
 GOOD = os.urandom(6 * 1024 * 1024)
 class H(http.server.BaseHTTPRequestHandler):
@@ -24,7 +24,7 @@ os.makedirs(os.path.join(sandbox.DIR, "catalog"))
 json.dump({"packs": [{"id": "demo_pack", "category": "audio", "title": "חבילת הדגמה (קובץ קטן מהשרת המקומי)", "title_en": "Demo pack (a small file from the local server)", "what": "הדגמה של הורדה עם התקדמות.", "what_en": "A demo of a download with progress.",
     "jobtypes": [], "runtime": [], "needs": {"vram_min_gb": 2, "vram_ok_gb": 4, "ram_gb": 4}, "license": {"name": "demo"}, "files": [
     {"root": "models", "dest": "demo/demo.bin", "url": base + "/demo.bin", "size": len(GOOD), "sha256": hashlib.sha256(GOOD).hexdigest()}]}]}, open(os.path.join(sandbox.DIR, "catalog", "demo.json"), "w", encoding="utf-8"))
-daemon = subprocess.Popen([str(paths.VENV_PY), "-m", "aibroker.daemon"], cwd=".", env=dict(os.environ), creationflags=0x08000000)
+daemon = subprocess.Popen([sys.executable, "-m", "aibroker.daemon"], cwd=".", env=dict(os.environ), creationflags=osutil.NO_WINDOW, **osutil.SESSION)
 t0 = time.time()
 while not client.is_up():
     if time.time() - t0 > 20: sys.exit("no broker")

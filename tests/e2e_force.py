@@ -12,6 +12,7 @@ import sandbox
 
 os.environ["AIBROKER_PORT"] = "47695"
 from aibroker import client, paths
+from aibroker import osutil
 
 
 def main():
@@ -21,7 +22,7 @@ def main():
         res.append(bool(cond))
         print(("PASS " if cond else "FAIL ") + name + (("  |  " + str(extra)[:200]) if extra else ""), flush=True)
 
-    daemon = subprocess.Popen([str(paths.VENV_PY), "-m", "aibroker.daemon"], cwd=ROOT, env=dict(os.environ), creationflags=0x08000000)
+    daemon = subprocess.Popen([sys.executable, "-m", "aibroker.daemon"], cwd=ROOT, env=dict(os.environ), creationflags=osutil.NO_WINDOW, **osutil.SESSION)
     t0 = time.time()
     while not client.is_up():
         if time.time() - t0 > 20:

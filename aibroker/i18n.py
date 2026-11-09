@@ -14,14 +14,15 @@ def _read():
     env = os.environ.get("AIBROKER_LANG")
     if env in ("he", "en"):
         return env
-    home = Path(os.environ.get("AIBROKER_HOME") or (Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "ai-broker"))
+    from . import paths
+    home = paths.HOME
     try:
         v = json.loads((home / "config.json").read_text(encoding="utf-8")).get("lang")
         if v in ("he", "en"):
             return v
     except (OSError, ValueError, AttributeError):
         pass
-    return "he"
+    return paths.system_lang()
 
 
 LANG = _read()

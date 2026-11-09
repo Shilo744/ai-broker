@@ -2,7 +2,6 @@
 Owns the queue, starts jobs when the scheduler says they fit, measures them, keeps the legacy GPU lock, suspends under pressure.
 Start:  python -m aibroker.daemon      (or `aijob daemon start`)"""
 import collections
-import ctypes
 import statistics
 import re
 import shutil
@@ -19,26 +18,9 @@ import traceback
 import psutil
 
 from .i18n import T
-from . import catalog, hardware, i18n, paths, permissions, scheduler, store as st, winutil as wu
+from . import catalog, hardware, i18n, paths, permissions, scheduler, store as st, osutil as wu
 
 TERMINAL = ("done", "failed", "cancelled", "lost")
-
-
-class AdoptedProc:
-    """A job process started by an earlier broker. It is opened by pid, so its real exit code can still be read when it ends."""
-    def __init__(self, pid):
-        wu.k32.OpenProcess.restype = wu.wt.HANDLE
-        self._handle = wu.k32.OpenProcess(0x1000 | 0x100000 | 0x0001 | 0x0100, False, int(pid))     # query limited, synchronize, terminate, set quota
-        if not self._handle:
-            raise OSError("cannot open pid %d" % pid)
-        self.pid = int(pid)
-
-    def poll(self):
-        code = wu.wt.DWORD()
-        wu.k32.GetExitCodeProcess.argtypes = [wu.wt.HANDLE, ctypes.POINTER(wu.wt.DWORD)]
-        if not wu.k32.GetExitCodeProcess(self._handle, ctypes.byref(code)):
-            return None
-        return None if code.value == 259 else code.value
 
 
 class Live:
@@ -46,7 +28,7 @@ class Live:
     def __init__(self, proc, jobobj, fh):
         self.proc, self.jobobj, self.fh = proc, jobobj, fh
         self.t0 = time.time()
-        self.peak_ws = self.peak_vram = self.cur_ws = self.cur_vram = self.cur_commit = 0.0
+        self.peak_ws = self.peak_vram = self.cur_ws = self.cur_vram = self.cur_commit = self.peak_commit = 0.0
         self.cancel = False
         self.timed_out = False
         self.susp_user = self.susp_brake = False
@@ -98,7 +80,7 @@ class Broker:
             p = psutil.Process(j["pid"])
             if abs(p.create_time() - (j["started"] or 0)) > 60:       # another process with a reused pid
                 return False
-            proc = AdoptedProc(j["pid"])
+            proc = wu.AdoptedProc(j["pid"])
             jo = wu.JobObject()
             jo.assign(proc)                                           # best effort: lets the peak commit be measured again
             fh = open(j["log"], "ab")
@@ -405,12 +387,13 @@ class Broker:
                 try:
                     mi = p.memory_info()
                     ws += mi.rss
-                    com += getattr(mi, "pagefile", 0)
+                    com += mi.pagefile if hasattr(mi, "pagefile") else mi.rss        # no commit charge on macOS / Linux: resident memory
                     vr += gpu.get(p.pid, 0)
                 except psutil.Error:
                     pass
             lv.cur_ws, lv.cur_commit, lv.cur_vram = ws / wu.GB, com / wu.GB, vr / wu.GB
             lv.peak_ws = max(lv.peak_ws, lv.cur_ws)
+            lv.peak_commit = max(lv.peak_commit, lv.cur_commit)
             lv.peak_vram = max(lv.peak_vram, lv.cur_vram)
             j = self.store.get(jid)
             if j and j["timeout_s"] and time.time() - lv.t0 > j["timeout_s"] and not lv.timed_out:
@@ -426,7 +409,7 @@ class Broker:
             secs = time.time() - lv.t0
             root_ws, root_commit = wu.peak_of_process(lv.proc)
             lv.peak_ws = max(lv.peak_ws, root_ws)
-            peak_c = max(lv.jobobj.peak_commit_gb(), root_commit)
+            peak_c = max(lv.jobobj.peak_commit_gb(), root_commit, 0.0 if wu.IS_WIN else lv.peak_commit)
             state = "cancelled" if lv.cancel else ("done" if rc == 0 else "failed")
             note = "timeout" if lv.timed_out else ""
             j = self.store.get(jid)
@@ -549,7 +532,7 @@ class Broker:
         fh.flush()
         try:
             proc = subprocess.Popen(j["cmd"], cwd=j["cwd"] or None, env=env, stdout=fh, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                                    creationflags=wu.NO_WINDOW | wu.BELOW_NORMAL | wu.NEW_GROUP)
+                                    creationflags=wu.NO_WINDOW | wu.BELOW_NORMAL | wu.NEW_GROUP, **wu.SESSION)
         except OSError as e:
             fh.write(("[broker] cannot start: %r\n" % (e,)).encode())
             fh.close()
@@ -559,6 +542,11 @@ class Broker:
             return
         jo = wu.JobObject()
         jo.assign(proc)
+        if not wu.IS_WIN:                                           # the "below normal priority" of the Windows flags
+            try:
+                psutil.Process(proc.pid).nice(10)
+            except (psutil.Error, OSError):
+                pass
         lv = Live(proc, jo, fh)
         self.live[jid] = lv
         self.store.update(jid, state="running", started=time.time(), pid=proc.pid, avail_before=round(self.sys.get("ram_avail", 0), 1))

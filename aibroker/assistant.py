@@ -6,12 +6,13 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 
 from PySide6 import QtCore
 
 from .i18n import T
-from . import i18n, paths, winutil
+from . import i18n, osutil, paths
 
 PROMPT = paths.ROOT / "skill" / "ai-broker" / "AGENT_PROMPT.md"
 MCP_JSON = paths.ROOT / "mcp.json"
@@ -88,6 +89,9 @@ def write_prompt():
         base = base.replace("Speak to the owner in short, plain Hebrew", "Speak to the owner in short, plain English")
         base += ("\n\nLanguage: the owner chose English for this program. Answer in English. Write the `description` argument of every Bash / PowerShell call "
                  "in plain English (one short sentence), not in Hebrew.\n")
+    shell = "PowerShell" if osutil.IS_WIN else "bash / zsh"
+    system_name = {"win32": "Windows", "darwin": "macOS"}.get(sys.platform, "Linux")
+    base += "\n\nThis computer runs %s. Shell commands you write use %s syntax and this system's paths.\n" % (system_name, shell)
     paths.HOME.mkdir(parents=True, exist_ok=True)
     out = paths.HOME / "assistant_prompt.md"
     out.write_text(base, encoding="utf-8")
@@ -124,7 +128,7 @@ class Worker(QtCore.QThread):
         try:
             env = dict(os.environ, AIJOB_REQUESTER=T("claude (עוזר)"), PYTHONUTF8="1")
             self.proc = subprocess.Popen(cmd, cwd=str(paths.ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
-                                         creationflags=winutil.NO_WINDOW, encoding="utf-8", errors="replace")
+                                         creationflags=osutil.NO_WINDOW, encoding="utf-8", errors="replace")
             t0 = time.time()
             for line in self.proc.stdout:
                 line = line.strip()

@@ -23,9 +23,10 @@ os.environ["AIBROKER_PORT"] = "47699"
 from PySide6 import QtCore, QtWidgets as W
 from PySide6.QtCore import Qt
 from aibroker import client, gui, paths
+from aibroker import osutil
 
 sys.excepthook = lambda *a: (traceback.print_exception(*a), sys.stdout.flush())
-daemon = subprocess.Popen([str(paths.VENV_PY), "-m", "aibroker.daemon"], cwd=ROOT, env=dict(os.environ), creationflags=0x08000000)
+daemon = subprocess.Popen([sys.executable, "-m", "aibroker.daemon"], cwd=ROOT, env=dict(os.environ), creationflags=osutil.NO_WINDOW, **osutil.SESSION)
 t0 = time.time()
 while not client.is_up():
     if time.time() - t0 > 20:

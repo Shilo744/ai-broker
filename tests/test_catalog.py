@@ -61,5 +61,11 @@ shipped = catalog.load()
 check("the shipped catalog loads and every downloadable file has an https URL, a size and a SHA-256",
       shipped and all(f["url"].startswith("https://huggingface.co/") and f["size"] > 0 and len(f["sha256"]) == 64 for p in shipped.values() for f in p.get("files", [])), len(shipped))
 check("every shipped category is a known one", all(p["category"] in [c[0] for c in catalog.CATEGORIES] for p in shipped.values()))
+mac = {"platform": "macos", "ram_gb": 32.0, "gpu": {"name": "Apple M3", "vram_gb": 32.0, "unified": True}, "software": {}}
+win = {"platform": "windows", "ram_gb": 32.0, "gpu": {"name": "RTX", "vram_gb": 12.0}, "software": {}}
+check("a CUDA-only pack does not fit a Mac, whatever its memory", catalog.verdict(shipped["triposg"], mac) == ("no", ["platform"]))
+check("the same pack is judged by memory on Windows", catalog.verdict(shipped["triposg"], win)[0] in ("ok", "tight"))
+check("a pack without a platform list fits any system (the language model)", catalog.verdict(shipped["ollama_llm"], mac)[0] == "ok")
+check("unified memory counts as the graphics memory", catalog.verdict(shipped["acestep_music"], mac)[0] == "ok")
 print("catalog test: %d failed" % bad)
 sys.exit(1 if bad else 0)

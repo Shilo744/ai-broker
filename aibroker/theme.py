@@ -19,7 +19,7 @@ WARN = "#e0a030"
 BAD = "#db5c5c"
 
 QSS = """
-* { font-family: 'Segoe UI'; font-size: 10.5pt; color: #dfe1e5; }
+* { font-family: 'Segoe UI', 'Helvetica Neue', Arial; font-size: 10.5pt; color: #dfe1e5; }
 QMainWindow, QDialog, QWidget#page { background: #1e1f22; }
 QFrame#topbar { background: #1e1f22; border-bottom: 1px solid #393b40; }
 QFrame#resbar { background: #25272a; border-bottom: 1px solid #393b40; }
@@ -53,7 +53,7 @@ QTabBar::tab:selected { color: #ffffff; border-bottom: 2px solid #3574f0; } QTab
 QLineEdit, QSpinBox, QDoubleSpinBox, QComboBox { background: #1e1f22; border: 1px solid #43454a; border-radius: 4px; padding: 5px 8px; selection-background-color: #3574f0; }
 QLineEdit:focus, QComboBox:focus { border-color: #3574f0; }
 QComboBox QAbstractItemView { background: #2b2d30; selection-background-color: #2e436e; border: 1px solid #43454a; }
-QPlainTextEdit { background: #17181a; color: #bcbec4; border: 1px solid #393b40; border-radius: 4px; font-family: Consolas; font-size: 10pt; padding: 8px; }
+QPlainTextEdit { background: #17181a; color: #bcbec4; border: 1px solid #393b40; border-radius: 4px; font-family: Consolas, Menlo, monospace; font-size: 10pt; padding: 8px; }
 QSlider::groove:horizontal { height: 3px; background: #43454a; border-radius: 1px; } QSlider::sub-page:horizontal { background: #3574f0; border-radius: 1px; }
 QSlider::handle:horizontal { background: #dfe1e5; width: 12px; margin: -5px 0; border-radius: 6px; }
 QCheckBox { spacing: 8px; padding: 2px 0; } QCheckBox::indicator { width: 15px; height: 15px; border: 1px solid #4e5157; border-radius: 3px; background: #1e1f22; }

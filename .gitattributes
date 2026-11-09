@@ -1,0 +1,5 @@
+# Scripts are stored byte-for-byte: .bat with CRLF (cmd.exe needs it), shell scripts with LF (bash fails on CRLF)
+*.bat -text
+*.command -text
+*.sh -text
+bin/aijob -text

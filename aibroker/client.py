@@ -5,7 +5,7 @@ import subprocess
 import sys
 import time
 
-from . import paths, winutil
+from . import osutil, paths
 
 
 class BrokerDown(Exception):
@@ -47,11 +47,11 @@ def start_daemon(wait_s=15.0):
     if is_up():
         return True
     exe = str(paths.VENV_PYW if paths.VENV_PYW.exists() else sys.executable)
-    flags = winutil.DETACHED | winutil.NEW_GROUP | winutil.NO_WINDOW
-    for extra in (winutil.BREAKAWAY, 0):          # leave the caller's job object if it allows breakaway
+    flags = osutil.DETACHED | osutil.NEW_GROUP | osutil.NO_WINDOW
+    for extra in (osutil.BREAKAWAY, 0):          # leave the caller's job object if it allows breakaway
         try:
             subprocess.Popen([exe, "-m", "aibroker.daemon"], cwd=str(paths.ROOT), creationflags=flags | extra, stdin=subprocess.DEVNULL,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True)
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True, **osutil.SESSION)
             break
         except OSError:
             continue

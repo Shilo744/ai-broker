@@ -19,6 +19,7 @@ import sandbox                                      # temp data folder (AIBROKER
 
 os.environ["AIBROKER_PORT"] = "47698"
 from aibroker import client, paths
+from aibroker import osutil
 
 GOOD = os.urandom(2 * 1024 * 1024)
 BAD = os.urandom(300 * 1024)
@@ -57,7 +58,7 @@ def main():
                               {"root": "models", "dest": "test/bad.bin", "url": base + "/bad.bin", "size": len(BAD), "sha256": "0" * 64}]},
                          {"id": "huge_pack", "category": "audio", "title": "Huge", "title_en": "Huge", "what": "x", "needs": {}, "files": [
                               {"root": "models", "dest": "huge/x.bin", "url": base + "/good.bin", "size": 900 * 1024 ** 4, "sha256": ""}]}]}, open(os.path.join(cat, "test.json"), "w", encoding="utf-8"))
-    daemon = subprocess.Popen([str(paths.VENV_PY), "-m", "aibroker.daemon"], cwd=ROOT, env=dict(os.environ), creationflags=0x08000000)
+    daemon = subprocess.Popen([sys.executable, "-m", "aibroker.daemon"], cwd=ROOT, env=dict(os.environ), creationflags=osutil.NO_WINDOW, **osutil.SESSION)
     t0 = time.time()
     while not client.is_up():
         if time.time() - t0 > 20:

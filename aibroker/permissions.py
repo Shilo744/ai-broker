@@ -68,10 +68,17 @@ BLOCKED = (
     (r"\b(iex|invoke-expression)\b.*(iwr|irm|invoke-webrequest|invoke-restmethod|downloadstring|curl|wget)|\bdownloadstring\b|-encodedcommand|\s-enc\s|frombase64string", "הרצת קוד שהורד או מוסתר"),
     (r"\[microsoft\.win32\.registry\]|\bregistrykey\b", "שינוי רישום המערכת (registry)"),
     (r"\brm\s+(-[a-z]+\s+)+(/|/\*|~/?|~/\*|\$home/?|\$home/\*)(\s|$)", "מחיקה של דיסק או תיקיית משתמש שלמה"),
+    # macOS / Linux
+    (r"\b(mkfs(\.\w+)?|fdisk|sfdisk|parted|wipefs)\b|\bdd\b.*\bof=/dev/|\bdiskutil\s+(erase\w*|partitiondisk|apfs\s+(delete\w*|erase\w*)|secureerase|zero\w*|reformat)", "פירמוט או שינוי של דיסקים"),
+    (r"\bcsrutil\b|\bspctl\s+--(master-)?disable|\bsetenforce\s+0|\bufw\s+(disable|allow|deny)|\bpfctl\b|\biptables\b", "שינוי הגדרות אבטחה"),
+    (r"\b(reboot|halt|poweroff)\b|\bsystemctl\s+(reboot|poweroff|halt)\b|\bosascript\b.*\b(shut down|restart)\b", "כיבוי או הפעלה מחדש של המחשב"),
+    (r"\b(launchctl\s+(load|unload|bootstrap|bootout|enable|disable|remove)|systemctl\s+(stop|disable|mask|enable|start|restart)|crontab\s+-[re]|visudo|passwd|useradd|userdel|usermod|dscl|sysadminctl)\b", "שינוי משתמשים, חומת אש או שירותים"),
+    (r"(^|[\s;|&(])(sudo|doas)\s", "הרצה עם הרשאות מנהל (sudo)"),
+    (r"\b(curl|wget)\b[^|;]*\|\s*(sudo\s+)?(ba|z|da)?sh\b|\bbase64\s+(-d|--decode)\b.*\|\s*(ba|z)?sh\b", "הרצת קוד שהורד או מוסתר"),
 )
-SYSTEM_PATH = re.compile(r"(\b[a-z]:\\(windows|program files( \(x86\))?|programdata)\b|%systemroot%|%windir%|\$env:(systemroot|windir|programfiles|programdata)|\bsystem32\b)", re.I)
-DRIVE_ROOT = re.compile(r"(?<![\w\\])[a-z]:\\?(?=['\"\s;|)]|$)", re.I)
-USER_ROOT = re.compile(r"\b[a-z]:\\users\\[^\\'\"\s]+\\?(?=['\"\s;|)]|$)", re.I)
+SYSTEM_PATH = re.compile(r"(\b[a-z]:\\(windows|program files( \(x86\))?|programdata)\b|%systemroot%|%windir%|\$env:(systemroot|windir|programfiles|programdata)|\bsystem32\b|(?<![\w.])/(system|library|usr|etc|bin|sbin|boot|lib|lib64|applications)(/[^/'\"\s]*)?(?=['\"\s;|)]|$))", re.I)
+DRIVE_ROOT = re.compile(r"(?<![\w\\])[a-z]:\\?(?=['\"\s;|)]|$)|(?<![\w./:~-])/(?=['\"\s;|)]|$)", re.I)
+USER_ROOT = re.compile(r"\b[a-z]:\\users\\[^\\'\"\s]+\\?(?=['\"\s;|)]|$)|(?<![\w.])/(users|home)/[^/'\"\s]+/?(?=['\"\s;|)]|$)|(?<![\w/.])~/?(?=['\"\s;|)]|$)", re.I)
 
 DELETE = re.compile(r"\b(remove-item|ri|rm|del|erase|rmdir|rd|unlink|clear-content|clear-recyclebin)\b|\s-delete\b|\[(system\.)?io\.(file|directory)\]::delete", re.I)
 KILL = re.compile(r"\b(stop-process|taskkill|kill|stop-service|spps|pkill)\b", re.I)
@@ -87,7 +94,7 @@ READ_ONLY_FIRST = re.compile(
     r"^(get-[\w-]+|test-path|test-connection|select-[\w-]+|where-object|sort-object|measure-object|group-object|format-[\w-]+|out-string|out-host|out-null|"
     r"write-output|write-host|convertto-[\w-]+|convertfrom-[\w-]+|resolve-path|split-path|join-path|compare-object|foreach-object|%|\?|nvidia-smi|dir|ls|type|cat|gc|gci|gps|gwmi|"
     r"gcim|gm|gcm|whoami|hostname|systeminfo|tasklist|where|where\.exe|echo|ver|vol|cd|set-location|pushd|popd|pwd|head|tail|wc|du|df|free|uname|which|find|grep|rg|"
-    r"stat|file|tree|sort|uniq|cut|tr|date|true|false|\[math\]::\w+|\[system\.[\w.]+\]::\w+|\$[\w:]+\s*=|\$[\w:.]+)$", re.I)
+    r"stat|file|tree|sort|uniq|cut|tr|date|true|false|sw_vers|system_profiler|vm_stat|lscpu|lspci|nproc|ps|ioreg|uptime|id|printenv|\[math\]::\w+|\[system\.[\w.]+\]::\w+|\$[\w:]+\s*=|\$[\w:.]+)$", re.I)
 READ_ONLY_FULL = (
     re.compile(r"^(python3?|py)\s+(-v|--version|-c\s+['\"]import\s+[\w.]+;?\s*print\([^)]*\)['\"])", re.I),
     re.compile(r"^(pip3?|python3?\s+-m\s+pip)\s+(list|show|freeze|--version|check)\b", re.I),
@@ -96,6 +103,8 @@ READ_ONLY_FULL = (
     re.compile(r"^wmic\s+.*\bget\b", re.I),
     re.compile(r"^fsutil\s+volume\s+diskfree", re.I),
     re.compile(r"^nvidia-smi\b", re.I),
+    re.compile(r"^sysctl\s+(-n\s+)?[\w.]+$", re.I),
+    re.compile(r"^diskutil\s+(list|info)\b", re.I),
 )
 
 URL = re.compile(r"https?://[^\s'\"<>)]+", re.I)
@@ -160,7 +169,7 @@ def _describe_shell(cmd, desc, kind):
         parts.append(T("בודק כמה מקום פנוי יש בדיסקים"))
     if re.search(r"nvidia-smi|videocontroller|get-pnpdevice", low):
         parts.append(T("בודק את כרטיס המסך והזיכרון שלו"))
-    if re.search(r"win32_(computersystem|processor|physicalmemory|operatingsystem)|systeminfo|get-computerinfo|get-ciminstance|get-wmiobject|gwmi", low) and not parts:
+    if re.search(r"win32_(computersystem|processor|physicalmemory|operatingsystem)|systeminfo|system_profiler|sw_vers|sysctl|lscpu|get-computerinfo|get-ciminstance|get-wmiobject|gwmi", low) and not parts:
         parts.append(T("בודק את החומרה של המחשב"))
     if re.search(r"get-process|tasklist|\bgps\b", low):
         parts.append(T("בודק אילו תוכנות רצות"))

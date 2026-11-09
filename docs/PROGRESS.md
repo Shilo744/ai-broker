@@ -21,6 +21,9 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 | 13 | First-run setup wizard: pick model kinds, hardware check, recommended models, download, finish; connect Claude Code | [x] v1: wizard (3 pages), catalog of 8 packs (ACE-Step and Qwen-Image-Edit downloadable with verified checksums, the rest detected or handed to Claude), download job type with resume and checksum, MCP tools; tests pass. Not in v1: LLM, installing ComfyUI / Python environments, other people's job types |
 | 14 | A file that tracks what is done | [x] this file |
 | 15 | "Why does it wait for the GPU when 10 GB are free?" (job #48, 22:53) | [x] answered: the estimate was 13.6 GB (one earlier 12.4 GB peak + 10%) and only 10.0 GB were free (6.0 GB held by other programs); even the typical 10.45 GB peak did not fit by 0.45 GB. Fixed: the waiting text shows the numbers and the biggest GPU users, "Run anyway" button / menu / `aijob force`, VRAM estimate no longer decided by one outlier; scheduler tests 16, `tests/e2e_force.py` 7/7 |
+| 16 | One double-click launcher that installs on first run | [x] `AI_Broker.bat` / `AI_Broker.command`; tested on a clean copy from git on Windows (306 s first run, 2.4 s second) |
+| 17 | Licence | [x] MIT (owner's choice) |
+| 18 | macOS and Linux support ("a universal tool") | [~] code written: `osutil` facade over `winutil` / `posixutil`, per-system data folder, auto budgets from the hardware, launch agent / autostart entry, shell-command classifier for macOS/Linux, `platforms` in the model packs, Ollama pack for a language model; `tests/test_platform.py` + GitHub Actions on windows/macos/ubuntu. NOT tried by a person on a real Mac |
 
 ## Done (checked)
 - Tests never touch the owner's data (`tests/sandbox.py`).

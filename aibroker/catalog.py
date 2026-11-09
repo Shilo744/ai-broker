@@ -17,7 +17,7 @@ CATEGORIES = (
     ("3d", "תלת-ממד", "להפוך תמונה לדגם תלת-ממדי, ולהכין אותו למשחק", "cube"),
     ("audio", "צלילים ומוזיקה", "מוזיקת רקע, אפקטים וקולות", "music"),
     ("game", "בדיקות משחק", "להריץ את המשחק ברקע ולצלם ממנו", "gamepad"),
-    ("text", "מודל שפה (LLM)", "צ'אט ועזרה בטקסט על המחשב שלך. עוד לא נתמך: בקרוב", "sparkles"),
+    ("text", "מודל שפה (LLM)", "צ'אט ועזרה בטקסט על המחשב שלך (דרך Ollama, Claude מתקין)", "sparkles"),
 )
 
 
@@ -87,6 +87,9 @@ def verdict(pack, profile):
     gpu = (profile or {}).get("gpu") or {}
     vram = float(gpu.get("vram_gb") or 0)
     ram = float((profile or {}).get("ram_gb") or 0)
+    plat = (profile or {}).get("platform")
+    if pack.get("platforms") and plat and plat not in pack["platforms"]:
+        return "no", ["platform"]                      # e.g. a CUDA-only model on a Mac
     vmin, vok = float(need.get("vram_min_gb", 0)), float(need.get("vram_ok_gb", need.get("vram_min_gb", 0)))
     if vmin and not vram:
         level = "no"

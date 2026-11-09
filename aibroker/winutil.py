@@ -1,5 +1,5 @@
-"""Windows helpers (ctypes only, no pywin32): memory status, Job Objects (peak commit of a whole process tree), PDH counters
-(per-process GPU memory, disk busy), nvidia-smi totals, toast, the legacy GPU lock file."""
+"""Windows backend of osutil (ctypes only, no pywin32): memory status, Job Objects (peak commit of a whole process tree), PDH counters
+(per-process GPU memory, disk busy), toast. Imported only on Windows; everything else goes through aibroker.osutil."""
 import ctypes
 import ctypes.wintypes as wt
 import os
@@ -164,17 +164,6 @@ def disk_busy_pct():
     return min(100.0, max(arr.values())) if arr else 0.0
 
 
-def nvidia_smi():
-    """(used_gb, total_gb, util_pct) of the NVIDIA card, or None."""
-    try:
-        r = subprocess.run(["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu", "--format=csv,noheader,nounits"],
-                           capture_output=True, text=True, timeout=5, creationflags=NO_WINDOW)
-        a = [float(x) for x in r.stdout.strip().splitlines()[0].split(",")]
-        return a[0] / 1024.0, a[1] / 1024.0, a[2]
-    except Exception:
-        return None
-
-
 def toast(title, text):
     """Windows toast notification through PowerShell/WinRT (no module needed). Fire and forget."""
     ps = ("[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null;"
@@ -189,56 +178,22 @@ def toast(title, text):
         pass
 
 
-# ---------------------------------------------------------------- legacy GPU lock (char_forge / gpu_lock.py convention)
-LOCK_STALE_S = 1500
+class AdoptedProc:
+    """A job process started by an earlier broker. It is opened by pid, so its real exit code can still be read when it ends."""
+    def __init__(self, pid):
+        k32.OpenProcess.restype = wt.HANDLE
+        self._handle = k32.OpenProcess(0x1000 | 0x100000 | 0x0001 | 0x0100, False, int(pid))     # query limited, synchronize, terminate, set quota
+        if not self._handle:
+            raise OSError("cannot open pid %d" % pid)
+        self.pid = int(pid)
+
+    def poll(self):
+        code = wt.DWORD()
+        k32.GetExitCodeProcess.argtypes = [wt.HANDLE, ctypes.POINTER(wt.DWORD)]
+        if not k32.GetExitCodeProcess(self._handle, ctypes.byref(code)):
+            return None
+        return None if code.value == 259 else code.value
 
 
-def lock_state(path, ours):
-    """'none' | 'ours' | 'foreign' (a fresh lock file we did not write; one older than 25 min is stale)."""
-    try:
-        age = time.time() - os.stat(path).st_mtime
-    except OSError:
-        return "none"
-    if ours:
-        return "ours"
-    return "foreign" if age < LOCK_STALE_S else "none"
-
-
-def lock_holder(path):
-    try:
-        return open(path, encoding="utf-8").read().strip()
-    except OSError:
-        return ""
-
-
-def lock_take(path, name):
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
-        try:                                              # stale foreign lock: take it over
-            if time.time() - os.stat(path).st_mtime >= LOCK_STALE_S:
-                os.remove(path)
-                return lock_take(path, name)
-        except OSError:
-            pass
-        return False
-    except OSError:
-        return False
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write("%s %s\n" % (name, time.strftime("%H:%M:%S")))
-    return True
-
-
-def lock_touch(path):
-    try:
-        os.utime(path)
-    except OSError:
-        pass
-
-
-def lock_release(path):
-    try:
-        os.remove(path)
-    except OSError:
-        pass
+def open_path(path):
+    os.startfile(str(path))

@@ -1,6 +1,6 @@
 # AI Broker
 
-**One queue for the heavy local AI jobs of a Windows PC.** Image and 3D models, Blender, music and sound models, game test runs: you and your Claude Code agents submit jobs to one place, and the broker runs as many of them at once as your RAM and GPU memory allow, learns what each job really costs, and steps aside when you play or record.
+**One queue for the heavy local AI jobs of your computer (Windows; macOS and Linux experimental).** Image and 3D models, Blender, music and sound models, game test runs: you and your Claude Code agents submit jobs to one place, and the broker runs as many of them at once as your RAM and GPU memory allow, learns what each job really costs, and steps aside when you play or record.
 
 [עברית: README.he.md](README.he.md)
 
@@ -26,20 +26,23 @@ Several agents, a game and a screen recorder share one laptop. When 22 shape job
 
 ## Requirements
 
-- Windows 10 or 11 (the memory, GPU and process control use Windows APIs; macOS and Linux are not supported yet)
-- Python 3.12
-- An NVIDIA GPU with `nvidia-smi` for VRAM-aware scheduling (without it everything still works, VRAM is just not measured)
+- **Windows 10 or 11** (the author's system, used every day), **macOS** or **Linux** (experimental, see [Platforms](#platforms))
+- Python 3.10 or newer
+- An NVIDIA GPU with `nvidia-smi` for VRAM-aware scheduling. Without one (a Mac, or a PC with another card) everything still works: the GPU budget is then the RAM budget, and VRAM is not measured
 - [Claude Code](https://claude.com/claude-code) for the in-window assistant and for the MCP tools (optional)
 
 The models themselves are **not** included. The job types call tools you install yourself (for example ComfyUI, TripoSG, Blender); see [Job types](#job-types).
 
 ## Quick start
 
-Needs Windows and [Python 3.10+](https://www.python.org/downloads/windows/) (tick "Add python.exe to PATH"). Download the repository (green **Code** button > **Download ZIP**, or `git clone https://github.com/Shilo744/ai-broker.git`) and **double-click `AI_Broker.bat`**.
+Download the repository (green **Code** button > **Download ZIP**, or `git clone https://github.com/Shilo744/ai-broker.git`), then:
 
-The first time it creates a private `.venv` folder next to it and installs the packages (a few minutes, needs internet); after that it starts at once. The window opens and starts the background service (it keeps running when you close the window). Data and logs live in `%LOCALAPPDATA%\ai-broker`.
+- **Windows:** install [Python 3.10+](https://www.python.org/downloads/windows/) (tick "Add python.exe to PATH") and **double-click `AI_Broker.bat`**.
+- **macOS / Linux:** install Python 3.10+ ([python.org](https://www.python.org/downloads/) or `brew install python@3.12`) and **double-click `AI_Broker.command`** (macOS: if it refuses to open, right-click > Open once, or run `bash AI_Broker.command` in a terminal).
 
-Connect Claude Code (optional): **Settings (gear icon) > Claude > Connect Claude Code**, or run `register.bat`. It adds the MCP server for your Windows user and copies the skill file. Open a new Claude Code session and ask "what is in the AI queue?". `unregister.bat` removes it.
+The first time it creates a private `.venv` folder next to it and installs the packages (a few minutes, needs internet); after that it starts at once. The window opens and starts the background service (it keeps running when you close the window). Data and logs live in `%LOCALAPPDATA%\ai-broker` (Windows), `~/Library/Application Support/ai-broker` (macOS), `~/.local/share/ai-broker` (Linux).
+
+Connect Claude Code (optional): **Settings (gear icon) > Claude > Connect Claude Code**, or run `register.bat` (`register.command` on macOS / Linux). It adds the MCP server for your user and copies the skill file. Open a new Claude Code session and ask "what is in the AI queue?". `unregister.bat` / `unregister.command` removes it.
 
 ## Using it
 
@@ -89,7 +92,7 @@ Job types are JSON files in `jobtypes/` and `adapters/<name>/jobtypes/`:
 
 ## Configuration
 
-`%LOCALAPPDATA%\ai-broker\config.json` (also editable from the window and `aijob limits`):
+`%LOCALAPPDATA%\ai-broker\config.json` (on macOS `~/Library/Application Support/ai-broker`, on Linux `~/.local/share/ai-broker`; also editable from the window and `aijob limits`):
 
 | Key | Meaning |
 |---|---|
@@ -109,12 +112,12 @@ Every second the broker walks the queue in order and starts a job when all of th
 
 | Path | What |
 |---|---|
-| `aibroker/` | the program: `daemon.py` (service), `scheduler.py`, `gui.py` and `kit.py` (window), `assistant.py` and `permissions.py` (Claude in the window), `mcp_server.py`, `cli.py`, `hardware.py`, `i18n*.py` |
+| `aibroker/` | the program: `daemon.py` (service), `scheduler.py`, `gui.py` and `kit.py` (window), `assistant.py` and `permissions.py` (Claude in the window), `mcp_server.py`, `cli.py`, `osutil.py` (+ `winutil.py` / `posixutil.py`: everything that differs per operating system), `hardware.py`, `i18n*.py` |
 | `jobtypes/`, `adapters/` | job types (JSON) and project-specific adapters |
 | `runners/` | small scripts that run a model |
 | `skill/` | instructions for agents (`SKILL.md`) and the assistant prompt |
 | `catalog/` | model packs of the setup (JSON: files with official URL, size and SHA-256, hardware needs, licence) |
-| `tests/` | `test_scheduler.py`, `test_permissions.py`, `test_i18n.py`, `test_catalog.py`, `test_download.py`, `ui_smoke.py`, `e2e_approval.py`, `e2e_setup.py`, `e2e_wizard.py`, `e2e_force.py` |
+| `tests/` | `test_scheduler.py`, `test_permissions.py`, `test_i18n.py`, `test_catalog.py`, `test_download.py`, `test_platform.py`, `ui_smoke.py`, `e2e_approval.py`, `e2e_setup.py`, `e2e_wizard.py`, `e2e_force.py` |
 | `docs/` | model notes, test report, progress tracker |
 
 ## Development
@@ -128,9 +131,21 @@ Every second the broker walks the queue in order and starts a job when all of th
 
 `tests\e2e_approval.py` runs the real Claude Code on a separate throw-away broker (a few cents of quota). UI strings are Hebrew in the code and go through `T()`; add the English text to `aibroker/i18n_en.py` and run `python tools\i18n_tool.py check`.
 
+## Platforms
+
+| | Windows | macOS | Linux |
+|---|---|---|---|
+| Window, queue, scheduler, assistant, setup wizard | yes | yes | yes |
+| Memory and process control | Windows APIs | `psutil` | `psutil` |
+| Per-program GPU memory ("who is holding the GPU") | yes | no | NVIDIA only |
+| Start with the computer | Startup shortcut | launch agent | autostart entry |
+| Launcher | `AI_Broker.bat` | `AI_Broker.command` | `AI_Broker.command` |
+
+Windows is what the author uses every day. The macOS and Linux parts are written and covered by automated tests that run on GitHub's own Windows, macOS and Linux machines for every change (see the *tests* workflow), but nobody has used them on a real Mac yet: expect rough edges and please open an issue. There is no commit charge or peak-commit counter outside Windows, so the broker uses resident memory instead. The model packs list which systems each model supports (for example the CUDA models are Windows / Linux only); on a Mac the language-model pack (Ollama) is the one that works out of the box.
+
 ## Limits
 
-Windows only. The service listens on localhost without authentication (any process of your Windows user can submit jobs). It does not give real VRAM isolation: it plans from estimates and measurements, the driver can still page. If the service crashes, running jobs keep running but their exit code is lost.
+The service listens on localhost without authentication (any process of your user can submit jobs). It does not give real VRAM isolation: it plans from estimates and measurements, the driver can still page. If the service crashes, running jobs keep running but their exit code is lost (on macOS / Linux it is reported as -2).
 
 ## License
 

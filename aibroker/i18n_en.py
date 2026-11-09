@@ -109,7 +109,7 @@ EN = {
     'הדגם הקל': 'The light model',
     'הדיסק עסוק מדי, מחכה שיירגע': 'The disk is too busy, waiting for it to calm down',
     'ההגדרות של Claude עצמו': "Claude's own settings",
-    'הודעה של Windows כשעבודה מסתיימת': 'A Windows notification when a job finishes',
+    'הודעה על המסך כשעבודה מסתיימת': 'A notification when a job finishes',
     'הוסף לתור': 'Add to queue',
     'הושלם  %s': 'Finished  %s',
     'החלון הוסתר לאזור ההודעות. העבודות ממשיכות לרוץ.': 'The window was hidden to the notification area. Jobs keep running.',
@@ -143,7 +143,7 @@ EN = {
     'הפעל': 'Run',
     'הפעל את זה דרך ה-broker (submit_job). אם חסר מידע, שאל אותי בקצרה. התוצאות נשמרות בתיקיית המודל ומופיעות בדף שלו.': "Run it through the broker (submit_job). If information is missing, ask me briefly. The results are saved in the model's folder and appear on its page.",
     'הפעלה': 'Startup',
-    'הפעלה עם Windows': 'Start with Windows',
+    'הפעלה עם המחשב': 'Start with the computer',
     'הצג': 'Show',
     'הצג את הפקודה': 'Show the command',
     'הצג בתור': 'Show in queue',
@@ -211,7 +211,7 @@ EN = {
     'לבטל %d עבודות? עבודה שרצה תיעצר.': 'Cancel %d jobs? A running job will be stopped.',
     'לבטל?': 'Cancel?',
     'להסיר את החיבור של ה-broker מ-Claude Code?': "Remove the broker's connection from Claude Code?",
-    'להפעיל את התוכנה עם Windows (תעלה בשקט באזור ההודעות)': 'Start the program with Windows (it starts quietly in the notification area)',
+    'להפעיל את התוכנה עם הפעלת המחשב (תעלה בשקט באזור ההודעות)': 'Start the program when the computer starts (it starts quietly in the notification area)',
     'להריץ בפקודה: ': 'Run the command: ',
     'להריץ ראשונה': 'Run first',
     'לוקח יותר מהרגיל (בדרך כלל %d שניות)': 'Taking longer than usual (normally %d seconds)',
@@ -224,7 +224,7 @@ EN = {
     'מבקש אישור': 'asks for approval',
     'מגבלות': 'Limits',
     'מגבלות רכות: המערכת מכניסה כמה שיותר עבודות בתוכן, ואפשר לשנות אותן תוך כדי ריצה': 'Soft limits: the system fits as many jobs as it can inside them, and you can change them while jobs run',
-    'מגבלות, הפעלה עם Windows, חיבור ל-Claude Code, יומן': 'Limits, start with Windows, Claude Code connection, log',
+    'מגבלות, הפעלה עם המחשב, חיבור ל-Claude Code, יומן': 'Limits, start with the computer, Claude Code connection, log',
     'מגה-פיקסל': 'Megapixels',
     'מדביק תמונה מהלוח': 'pastes an image from the clipboard',
     'מה לעשות בתמונה': 'What to do with the image',
@@ -281,7 +281,7 @@ EN = {
     'מתחבר…': 'Connecting…',
     'מתחיל תיכף': 'Starting soon',
     'מתקדם': 'Advanced',
-    'מתקדם: מגבלות, חיבור ל-Claude Code, הפעלה עם Windows': 'Advanced: limits, Claude Code connection, start with Windows',
+    'מתקדם: מגבלות, חיבור ל-Claude Code, הפעלה עם המחשב': 'Advanced: limits, Claude Code connection, start with the computer',
     'מתקין תוכנה': 'Installs software',
     'נבחרה תמונה: ': 'Image chosen: ',
     'נוספה עבודה #%d': 'Job #%d added',
@@ -431,7 +431,7 @@ EN.update({
     'בודק אילו מודלים מתאימים למחשב': "Checking which models suit the computer",
     'מוריד מודלים': "Downloads models",
     'מוריד מודלים: %s (עד %.1f GB)': "Downloads models: %s (up to %.1f GB)",
-    'הגדרות: שפה, חיבור ל-Claude Code, הפעלה עם Windows': "Settings: language, Claude Code connection, start with Windows",
+    'הגדרות: שפה, חיבור ל-Claude Code, הפעלה עם המחשב': "Settings: language, Claude Code connection, start with the computer",
     'החלון ייפתח מחדש כדי להחליף שפה. העבודות ממשיכות לרוץ. להמשיך?': "The window will open again to change the language. Jobs keep running. Continue?",
     'כללי': "General",
     'כן, החלף שפה': "Yes, change the language",
@@ -493,7 +493,7 @@ EN.update({
     'ליצור תמונות מתיאור במילים, ולערוך תמונות קיימות': 'Create images from a description, and edit existing images',
     'מודל שפה (LLM)': 'Language model (LLM)',
     'מוזיקת רקע, אפקטים וקולות': 'Background music, effects and voices',
-    "צ'אט ועזרה בטקסט על המחשב שלך. עוד לא נתמך: בקרוב": 'Chat and writing help on your own computer. Not supported yet: coming soon',
+    "צ'אט ועזרה בטקסט על המחשב שלך (דרך Ollama, Claude מתקין)": 'Chat and writing help on your own computer (through Ollama; Claude sets it up)',
     'צלילים ומוזיקה': 'Sounds and music',
     'תלת-ממד': '3D models',
     'תמונות': 'Images',
@@ -505,6 +505,10 @@ EN.update({
     'אין מספיק RAM לעבודה הזו: עבודות אחרות תופסות %s, והיא צריכה כ-%s (המגבלה %s).': 'Not enough RAM for this job: other jobs hold %s, and it needs about %s (the limit is %s).',
     'הרץ בכל זאת': 'Run anyway',
     'מתעלם מהמגבלות של RAM ו-GPU (לא מהבלם ולא מ״עצור הכול״). ייתכן שהעבודה תרוץ לאט יותר.': 'Ignores the RAM and GPU limits (not the safety brake and not "Pause all"). The job may run more slowly.',
+})
+
+EN.update({
+    'הרצה עם הרשאות מנהל (sudo)': 'Running with administrator rights (sudo)',
 })
 
 # a word that means two things in Hebrew: T(word, context) looks here first
