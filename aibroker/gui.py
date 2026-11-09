@@ -887,7 +887,11 @@ class Main(W.QMainWindow):
         self.pause.clicked.connect(lambda on: self.api({"op": "pause"} if on else {"op": "resume"}))
         adv = W.QPushButton("מתקדם")
         adv.clicked.connect(self.open_advanced)
-        for b in (self.play, self.pause, adv):
+        ask = W.QPushButton("שאל את Claude")
+        ask.setObjectName("primary")
+        ask.setToolTip("פותח את Claude Code בתוך התוכנה, עם גישה לתור, למשאבים ולתוצאות. אפשר לבקש ממנו להמליץ על מודלים ולהוריד אותם (באישור שלך).")
+        ask.clicked.connect(self.open_claude)
+        for b in (ask, self.play, self.pause, adv):
             head.addWidget(b)
         v.addLayout(head)
         split = W.QSplitter(Qt.Horizontal)
@@ -1166,6 +1170,15 @@ class Main(W.QMainWindow):
             if r and r.get("ok"):
                 self.statusBar().showMessage("נוספה עבודה מספר %d" % r["id"], 5000)
                 self.tabs.setCurrentIndex(0)
+
+    def open_claude(self):
+        """Claude Code in its own terminal window, started with the broker's MCP tools and assistant instructions (session-only flags, no settings are edited)."""
+        import subprocess
+        bat = str(paths.ROOT / "bin" / "Claude_Here.bat")
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "AI Broker + Claude", bat], cwd=str(paths.ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError as e:
+            self.statusBar().showMessage("לא הצלחתי לפתוח את Claude: %s" % e, 6000)
 
     def open_advanced(self):
         AdvancedDialog(self).exec()
