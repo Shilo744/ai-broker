@@ -541,6 +541,11 @@ class ChatPanel(W.QFrame):
         cl.setSpacing(6)
         self.chips = W.QHBoxLayout()
         cl.addLayout(self.chips)
+        self.drop_zone = W.QLabel("גרור לכאן תמונה, או לחץ ״בחר תמונה״ ואז ״צור דגם 3D״")
+        self.drop_zone.setAlignment(Qt.AlignCenter)
+        self.drop_zone.setMinimumHeight(70)
+        self.drop_zone.setStyleSheet("border: 2px dashed #3a4252; border-radius: 12px; color: #8b93a5; padding: 14px;")
+        cl.addWidget(self.drop_zone)
         self.edit = W.QPlainTextEdit()
         self.edit.setFixedHeight(62)
         self.edit.setLayoutDirection(Qt.LeftToRight)
@@ -595,6 +600,9 @@ class ChatPanel(W.QFrame):
 
     def set_attached(self, path):
         self.attached = path
+        tid, cfg = self.cfg()
+        if cfg and not cfg.get("text"):
+            self.drop_zone.setText(("נבחרה תמונה: " + Path(path).name + "   (לחץ ״צור דגם 3D״)") if path else "גרור לכאן תמונה, או לחץ ״בחר תמונה״ ואז ״צור דגם 3D״")
         while self.chips.count():
             it = self.chips.takeAt(0)
             if it.widget():
@@ -685,7 +693,15 @@ class ChatPanel(W.QFrame):
                 it.widget().deleteLater()
         can = bool(cfg)
         self.comp.setVisible(can)
-        self.attach_btn.setVisible(bool(cfg and cfg.get("file")))
+        has_text = bool(cfg and cfg.get("text"))
+        has_file = bool(cfg and cfg.get("file"))
+        self.edit.setVisible(has_text)
+        self.drop_zone.setVisible(bool(cfg) and not has_text)
+        self.attach_btn.setVisible(has_file)
+        self.attach_btn.setText("בחר תמונה" if not has_text else "צרף קובץ")
+        self.send_btn.setText("שלח" if has_text and has_file else ("צייר" if has_text else "צור דגם 3D"))
+        self.hint_lbl.setVisible(bool(cfg))
+        self.adv_btn.setVisible(has_text)
         # explanation bubble (always first)
         b = Bubble("model")
         if cfg:
@@ -814,8 +830,7 @@ class Main(W.QMainWindow):
         if tray and W.QSystemTrayIcon.isSystemTrayAvailable():
             self._build_tray()
         self.settings = QtCore.QSettings("ai-broker", "gui3")
-        if self.settings.value("geometry"):
-            self.restoreGeometry(self.settings.value("geometry"))
+        self.fit_to_screen()
         self.poller = Poller()
         self.poller.got.connect(self.on_state)
         self.poller.down.connect(self.on_down)
@@ -824,6 +839,14 @@ class Main(W.QMainWindow):
         t = QtCore.QTimer(self)
         t.timeout.connect(self.refresh_files)
         t.start(3000)
+
+    def fit_to_screen(self):
+        """Open at a size that fits the screen the window is on, centred; never half off-screen (also if a saved geometry came from a bigger screen)."""
+        scr = (self.screen() or W.QApplication.primaryScreen()).availableGeometry()
+        w = min(self.width(), int(scr.width() * 0.92))
+        h = min(self.height(), int(scr.height() * 0.92))
+        self.resize(max(900, w), max(620, h))
+        self.move(scr.left() + (scr.width() - self.width()) // 2, scr.top() + (scr.height() - self.height()) // 2)
 
     # ------------------------------------------------------------ build
     def _panel(self):
@@ -1479,7 +1502,6 @@ class Main(W.QMainWindow):
         self.close()
 
     def closeEvent(self, e):
-        self.settings.setValue("geometry", self.saveGeometry())
         if self.tray and not self.quitting:
             e.ignore()
             self.hide()
