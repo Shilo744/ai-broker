@@ -3,9 +3,9 @@ the owner's service, window, chat history and settings are never touched.
 
   .venv\\Scripts\\python.exe tests\\e2e_approval.py
 
-Scenarios: (1) a file write at level "normal" shows a Hebrew question card, the test clicks Approve -> the file exists;
-(2) the same with Decline -> no file, Claude says so; (3) a read-only disk check at "normal" runs with NO question;
-(4) the same read-only command at level "careful" DOES ask. (Claude Code itself never asks about trivial commands such as Get-Date, so the test uses a command with a script block.)"""
+With real Claude: (1) a file write at level "normal" shows a Hebrew question card, the test clicks Approve -> the file exists; (2) the same with Decline -> no file.
+Through the broker itself (deterministic: what Claude Code decides to ask about is its own business and varies from run to run, the broker's answer must not):
+(3) the policy per level for a read-only command, a write, a delete and a blocked action."""
 import json
 import os
 import subprocess
@@ -108,29 +108,33 @@ def tick():
         if not busy() and state["clicked"]:
             check("2: no file after Decline", not os.path.exists(FILE2))
             state["step"] = 3
-            say("Use the PowerShell tool to run exactly this command: Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}  (description 'בודק מקום פנוי'). Then answer in one short sentence.")
     elif s == 3:
-        if not busy():
-            check("3: read-only disk check ran with NO question at level normal", len(panel.perm_cards) == state["cards_seen"], len(panel.perm_cards) - state["cards_seen"])
-            check("3: the broker decided it silently (log says allow [normal])", "assistant allow [normal]" in broker_log())
-            client.call({"op": "assistant_level", "set": "careful"})
-            time.sleep(1.2)
-            state["step"] = 4
-            say("Use the PowerShell tool to run exactly this command: Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{n='UsedGB';e={[math]::Round($_.Used/1GB,1)}}  (description 'בודק מקום בשימוש'). Then answer in one short sentence.")
-    elif s == 4:
-        new = [c for pid, c in panel.perm_cards.items() if not c["answered"]]
-        if new and not state["clicked"]:
-            check("4: at level careful the same read-only command asks", True)
-            new[0]["yes"].click()
-            state["clicked"] = True
-        if not busy():
-            if not state["clicked"]:
-                check("4: at level careful the same read-only command asks", len(panel.perm_cards) > state["cards_seen"])
-            check("4: log says asks the owner [careful]", "asks the owner [careful]" in broker_log())
-            for line in broker_log().splitlines():
-                if "assistant" in line or "owner" in line:
-                    print("   log:", line[:160], flush=True)
-            finish()
+        policy_checks()
+        finish()
+
+
+def ask(level, tool, tin):
+    client.call({"op": "assistant_level", "set": level})
+    r = client.call({"op": "perm_ask", "tool": tool, "input": tin})
+    if r["state"] == "pending":                       # clean up: answer it so nothing stays open
+        client.call({"op": "perm_answer", "id": r["id"], "allow": False})
+    return r["state"]
+
+
+def policy_checks():
+    disk = {"command": "Get-PSDrive -PSProvider FileSystem | Select-Object Name, @{n='FreeGB';e={[math]::Round($_.Free/1GB,1)}}"}
+    write = {"command": "Set-Content -Path C:\\\\t\\\\a.txt -Value hi"}
+    delete = {"command": "Remove-Item C:\\\\Users\\\\shilo\\\\Downloads\\\\x.zip"}
+    blocked = {"command": "Format-Volume -DriveLetter D"}
+    check("3: normal: a read-only disk check is allowed at once", ask("normal", "PowerShell", disk) == "allow")
+    check("3: normal: a file write asks", ask("normal", "PowerShell", write) == "pending")
+    check("4: careful: even the read-only command asks", ask("careful", "PowerShell", disk) == "pending")
+    check("4: careful: reading a file is free", ask("careful", "Read", {"file_path": "C:\\\\x.txt"}) == "allow")
+    check("5: free: a file write runs at once", ask("free", "PowerShell", write) == "allow")
+    check("5: free: a delete still asks", ask("free", "PowerShell", delete) == "pending")
+    check("6: a blocked action is refused at every level", all(ask(lv, "PowerShell", blocked) == "deny" for lv in ("careful", "normal", "free")))
+    log = broker_log()
+    check("7: the broker's log records allow / asks / deny", "assistant allow [normal]" in log and "asks the owner [careful]" in log and "assistant deny [free]" in log)
 
 
 def finish():

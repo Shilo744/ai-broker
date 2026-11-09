@@ -27,6 +27,14 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 - Permission classifier: 68 unit checks. Translation table: `tools/i18n_tool.py check` and `tests/test_i18n.py`. Scheduler: 13 tests. UI smoke test: 15 checks.
 - Real Claude (`claude -p --permission-prompt-tool`) answered or held a permission request inside the same turn: approve writes the file, decline does not, a read-only command at level "normal" runs silently, at level "careful" it asks.
 
+## Known limits (say so to the owner)
+- The permission classifier is a set of rules on the command text, not a security boundary: it catches the usual dangerous commands, but it can miss an unusual one. "Free" is a choice the owner made knowingly.
+- What Claude Code itself decides to ask about varies from run to run (a real-Claude test of "read-only runs silently" failed once because Claude Code did not call the broker at all): the broker's answer is tested through the broker (`e2e_approval.py` checks 3-7), the plumbing with real Claude (checks 1-2).
+- `gpu_hogs` (names of the programs holding GPU memory) returned an empty list when the GPU was idle; it has not been seen with a real program holding memory. "Run anyway" has not been seen in the live window (no job was waiting).
+- English: the UI texts are complete by the checker, but only four pages were looked at in screenshots; some alignments may be slightly off in left-to-right mode.
+- Setup: only two packs can be downloaded automatically (ACE-Step, Qwen-Image-Edit), both already installed on the author's computer; no LLM packs; no installation of ComfyUI or Python environments.
+- GitHub: 15 local commits are not pushed; no licence chosen.
+
 ## Not verified yet (say so to the owner)
 - The owner's window and service were restarted with the latest code at the end of the session (setup wizard, cog icon, clickable permission cards). Everything after that is only in the repository.
 - A real Claude turn in English through the window; a real login autostart; macOS / Linux (Windows only).
