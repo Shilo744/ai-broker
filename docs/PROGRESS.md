@@ -1,38 +1,39 @@
 # AI Broker: progress tracker
 
-Kept up to date while working (what is done, what is open, what is NOT verified). Newest items last in each section. `[x]` done and checked, `[~]` in progress, `[ ]` open.
+Kept up to date while working (what is done, what is open, what is NOT verified). `[x]` done and checked, `[~]` in progress, `[ ]` open.
 
 ## Owner requests
 
 | # | Request (owner, 2026-11-09) | Status |
 |---|---|---|
-| 1 | One window, queue, resources, per-model output folders, chat per model, Claude built in (no terminal) | [x] done earlier (commits up to `1d8b930`) |
-| 2 | Professional dark IDE-like look, explanation on every model page | [x] done; model pages without an interface route requests to Claude |
-| 3 | Keep the current logo ("we stay with our logo") | [x] decided, nothing to do |
-| 4 | Hebrew text in chat is "crooked" when a paragraph starts with an English name; learn from Terminal Grid | [~] `rtltext.py` + `MessageView` (direction per paragraph by majority script) written, tested in isolation; being wired into the assistant chat |
-| 5 | Claude's messages should start from the right (not the left) | [~] `aligned_start()` written, not yet checked in the live window |
-| 6 | Approval cards must say in plain Hebrew what the action does (no raw JSON) | [~] `permissions.py` (classifier + Hebrew descriptions, 66 unit checks pass) done; card UI pending |
-| 7 | Owner chooses the permission level (careful / normal / free), not asked "every second" | [~] daemon ops done (`perm_ask`, `perm_get`, `perm_answer`, `assistant_level`); MCP `approve` tool, Worker flag and GUI selector pending |
-| 8 | Space planning: side panels and the empty queue take too much room, the important middle too little | [ ] |
-| 9 | Settings (gear icon) instead of "Advanced", with a language choice: Hebrew and English | [ ] |
-| 10 | Whole UI available in English (RTL/LTR switch) | [ ] |
-| 11 | GitHub documentation in English (README, docs); Hebrew README as a separate file | [ ] (push to GitHub only after the owner says so) |
-| 12 | First-run setup wizard: pick model kinds, hardware check, recommended models, download, finish; connect Claude Code | [ ] idea accepted; `hardware_profile` (daemon op + `aibroker/hardware.py`) is the first piece and is done |
-| 13 | Keep a file that tracks what is done and what is not | [x] this file |
+| 1 | One window, queue, resources, per-model output folders, chat per model, Claude built in (no terminal) | [x] |
+| 2 | Professional dark IDE-like look, explanation on every model page | [x] model pages without an interface route requests to Claude |
+| 3 | Keep the current logo | [x] decided, nothing to do |
+| 4 | Hebrew text in chat was "crooked" when a paragraph starts with an English name (learn from Terminal Grid) | [x] `rtltext.py` + `MessageView`: direction per paragraph by majority script; checked in screenshots against the owner's example |
+| 5 | Claude's messages start from the right | [x] `aligned_start()`; checked in the window |
+| 6 | Approval cards say in plain language what the action does | [x] `permissions.py` + card UI; real-Claude test `tests/e2e_approval.py` 8/8 |
+| 7 | Owner chooses the permission level (careful / normal / free) | [x] header button + dialog; daemon applies it; checked with real Claude |
+| 8 | Notices must not pop up over the content | [x] `NoticeBar` docked under the content; Windows balloons only when the window is hidden |
+| 9 | Space planning (side panels and the empty queue take too much room) | [x] resource strip replaces the left column, narrow model list, queue collapses when empty; middle is about 82 percent of the width (live screenshot at the owner's window size) |
+| 10 | Settings (gear icon) instead of "Advanced", with a language choice | [x] `SettingsDialog` (General / Behavior / Claude / Log) |
+| 11 | English as a UI language | [x] 429 texts, LTR layout, job types in two languages; `tests/test_i18n.py`; checked in screenshots. The in-window Claude answers in the chosen language (not run end to end in English) |
+| 12 | GitHub documentation in English | [x] README.md (English), README.he.md, DESIGN.md updated, requirements.txt, screenshots. **Not pushed**: waiting for the owner's yes |
+| 13 | First-run setup wizard: pick model kinds, hardware check, recommended models, download, finish; connect Claude Code | [ ] idea accepted; `hardware_profile` is done and used by the assistant |
+| 14 | A file that tracks what is done | [x] this file |
 
 ## Done (checked)
-- Tests no longer touch the owner's data (`tests/sandbox.py`: throw-away data folder and Qt settings; refuse to run without the real service).
-- Empty start cards float in the middle of the page (screenshot checked in the live window).
-- Permission classifier: 66 unit checks (`tests/test_permissions.py`).
-- Hardware profile: GPU, VRAM, RAM, disks, installed tools in about 0.2 s (`aibroker/hardware.py`).
-- Verified with a real `claude -p` call: `--permission-prompt-tool` lets the broker answer or hold a permission request in the same turn (no turn restart). The tool must return a plain text block (`structured_output=False`).
+- Tests never touch the owner's data (`tests/sandbox.py`).
+- Permission classifier: 66 unit checks. Translation table: `tools/i18n_tool.py check` and `tests/test_i18n.py`. Scheduler: 13 tests. UI smoke test: 15 checks.
+- Real Claude (`claude -p --permission-prompt-tool`) answered or held a permission request inside the same turn: approve writes the file, decline does not, a read-only command at level "normal" runs silently, at level "careful" it asks.
 
 ## Not verified yet (say so to the owner)
-- Real Claude run through the new approval flow inside the window (only the throw-away probe in the scratchpad was run).
-- English UI, settings dialog, setup wizard: not started.
-- Windows login autostart (real login), macOS/Linux: Windows only for now.
+- The window the owner has open still runs the version before the English UI and the settings dialog (needs a restart of the window and the service; the owner's window and service were last restarted before these two commits).
+- A real Claude turn in English through the window; a real login autostart; macOS / Linux (Windows only).
+- The first-run wizard is not started.
 
 ## Decisions
-- Direction of a paragraph comes from the majority script (Hebrew share of letters >= 30 percent), not the first letter (Terminal Grid design rule 10).
-- Permission levels: `careful` (asks for every shell command), `normal` (default: read-only commands run, changes ask), `free` (changes run; deletes and stopping programs still ask; formatting, registry, system and Claude's own settings are blocked at every level).
-- Downloads of models in the wizard are jobs in the same queue, from pinned official URLs with checksums, only after the owner ticks them.
+- Direction of a paragraph comes from the majority script (Hebrew share of letters >= 30 percent), not the first letter.
+- Permission levels: `careful`, `normal` (default), `free`; blocked actions at every level.
+- Language is saved in the broker's `config.json` (`lang`) and a change reopens the window. Hebrew is the source language of the code strings.
+- Wizard downloads will be jobs in the same queue, from pinned official URLs with checksums, only after the owner ticks them.
+- The license of the repository is not chosen: the owner decides (suggested default MIT).
