@@ -5,6 +5,7 @@ The window is only a client of the broker service: closing it never stops the qu
   python -m aibroker.gui [--screenshot out.png] [--model <output_dir>] [--tab 0|1] [--size 1280x800] [--no-tray]"""
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -13,7 +14,8 @@ from PySide6 import QtCore, QtGui, QtWidgets as W
 from PySide6.QtCore import Qt
 
 from . import assistant, client, paths, system
-from .theme import QSS, icon, logo_pixmap, make_icon, save_ico, sym_icon, symbol_pixmap
+from .theme import QSS, SYMBOL_ICON, dot_icon, icon, icon_pixmap, logo_pixmap, make_icon, qss, save_ico, style_titlebar, sym_icon, symbol_pixmap
+from .kit import (Bar, Chip, Dot, FlowLayout, Gauge, ModelDelegate, Palette, ROLE_COUNT, ROLE_KIND, ROLE_RUN, ROLE_WAIT, Seg, TaskWidget, ToolHeader, Toast, tool_button)
 
 # look and feel (palette, icons, logo): see theme.py
 
@@ -94,66 +96,6 @@ class Poller(QtCore.QThread):
                 self.msleep(100)
 
 
-class Bar(W.QFrame):
-    def __init__(self):
-        super().__init__()
-        self.f, self.color = 0.0, "#5fad65"
-        self.marker = None
-
-    def paintEvent(self, e):
-        p = QtGui.QPainter(self)
-        p.setRenderHint(QtGui.QPainter.Antialiasing)
-        w, h = self.width(), self.height()
-        rtl = self.layoutDirection() == Qt.RightToLeft
-        p.setPen(Qt.NoPen)
-        p.setBrush(QtGui.QColor("#393b40"))
-        p.drawRoundedRect(0, 0, w, h, 4, 4)
-        if self.f > 0:
-            p.setBrush(QtGui.QColor(self.color))
-            fw = max(h, w * self.f)
-            p.drawRoundedRect(QtCore.QRectF(w - fw if rtl else 0, 0, fw, h), 4, 4)
-        if self.marker is not None:
-            x = w * self.marker
-            x = w - x if rtl else x
-            p.setPen(QtGui.QPen(QtGui.QColor("#3574f0"), 2))
-            p.drawLine(QtCore.QPointF(x, -1), QtCore.QPointF(x, h + 1))
-
-
-class Gauge(W.QWidget):
-    """caption + status word, a thin bar (blue tick = the limit you set), numbers."""
-    def __init__(self, caption):
-        super().__init__()
-        lay = W.QVBoxLayout(self)
-        lay.setContentsMargins(0, 4, 0, 4)
-        lay.setSpacing(4)
-        row = W.QHBoxLayout()
-        self.cap = W.QLabel(caption)
-        self.cap.setObjectName("big")
-        self.word = W.QLabel("")
-        row.addWidget(self.cap)
-        row.addStretch(1)
-        row.addWidget(self.word)
-        self.bar = Bar()
-        self.bar.setFixedHeight(8)
-        self.num = W.QLabel("")
-        self.num.setObjectName("muted")
-        self.num.setLayoutDirection(Qt.LeftToRight)
-        self.num.setAlignment(Qt.AlignRight)
-        lay.addLayout(row)
-        lay.addWidget(self.bar)
-        lay.addWidget(self.num)
-
-    def set(self, used, total, num_text, marker=None):
-        f = max(0.0, min(1.0, used / total if total else 0))
-        color, word = ("#5fad65", "") if f < 0.6 else ("#e0a030", "עמוס") if f < 0.85 else ("#db5c5c", "כמעט מלא")
-        self.word.setText(word)
-        self.word.setStyleSheet("font-weight:600; color:%s;" % color)
-        self.num.setText(num_text)
-        self.bar.f, self.bar.color = f, color
-        self.bar.marker = (marker / total) if (marker and total) else None
-        self.bar.update()
-
-
 class QueueTable(W.QTableWidget):
     COLS = ["#", "סוג", "עבודה", "ביקש", "מצב", "זמן", "RAM", "פרטים"]
     reorder = QtCore.Signal(list, int)
@@ -175,7 +117,7 @@ class QueueTable(W.QTableWidget):
         self.setDefaultDropAction(Qt.CopyAction)
         hh = self.horizontalHeader()
         hh.setStretchLastSection(True)
-        for i, wd in enumerate((34, 104, 128, 66, 58, 50, 66)):
+        for i, wd in enumerate((34, 124, 150, 80, 84, 52, 70)):
             self.setColumnWidth(i, wd)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.job_ids, self.queued_ids = [], []
@@ -415,6 +357,11 @@ class AdvancedDialog(W.QDialog):
         self.resize(760, 560)
         self.setLayoutDirection(Qt.RightToLeft)
         lay = W.QVBoxLayout(self)
+        lay.setContentsMargins(20, 16, 20, 16)
+        lay.setSpacing(8)
+        h0 = W.QLabel("התנהגות")
+        h0.setObjectName("h2")
+        lay.addWidget(h0)
         for key, label in (("affinity", "לקבץ עבודות שמשתמשות באותו מודל (חוסך זמן טעינה)"), ("backfill", "לתת לעבודה קטנה לעקוף עבודה גדולה שמחכה"),
                            ("emergency_suspend", "כשהמחשב בלחץ: להקפיא את העבודה האחרונה שהתחילה"), ("suspend_on_pause", "״עצור הכול״ מקפיא גם עבודות שכבר רצות"),
                            ("toast", "הודעה של Windows כשעבודה מסתיימת")):
@@ -422,12 +369,17 @@ class AdvancedDialog(W.QDialog):
             c.setChecked(bool(parent.state and parent.state["flags"].get(key)))
             c.toggled.connect(lambda on, k=key: parent.api({"op": "limits", "flags": {k: on}}))
             lay.addWidget(c)
+        h1 = W.QLabel("הפעלה")
+        h1.setObjectName("h2")
+        h1.setContentsMargins(0, 10, 0, 0)
+        lay.addWidget(h1)
         self.auto = W.QCheckBox("להפעיל את התוכנה עם Windows (תעלה בשקט באזור ההודעות)")
         self.auto.setChecked(system.autostart_enabled())
         self.auto.toggled.connect(self.toggle_autostart)
         lay.addWidget(self.auto)
         h = W.QLabel("חיבור ל-Claude Code")
         h.setObjectName("h2")
+        h.setContentsMargins(0, 10, 0, 0)
         lay.addWidget(h)
         self.conn_lbl = W.QLabel("בודק…")
         self.conn_lbl.setObjectName("muted")
@@ -446,6 +398,7 @@ class AdvancedDialog(W.QDialog):
         self.check.start()
         h = W.QLabel("יומן")
         h.setObjectName("h2")
+        h.setContentsMargins(0, 10, 0, 0)
         lay.addWidget(h)
         log = W.QPlainTextEdit()
         log.setReadOnly(True)
@@ -464,17 +417,52 @@ class AdvancedDialog(W.QDialog):
 
 
 
+class OutputDialog(W.QDialog):
+    """The full output of one job (live while it runs)."""
+    def __init__(self, parent, jid, title):
+        super().__init__(parent)
+        self.jid = jid
+        self.setWindowTitle("פלט: " + title)
+        self.resize(900, 560)
+        lay = W.QVBoxLayout(self)
+        self.ed = W.QPlainTextEdit()
+        self.ed.setReadOnly(True)
+        self.ed.setLayoutDirection(Qt.LeftToRight)
+        lay.addWidget(self.ed)
+        self.t = QtCore.QTimer(self)
+        self.t.timeout.connect(self.refresh)
+        self.t.start(1500)
+        self.refresh()
+
+    def refresh(self):
+        try:
+            r = client.call({"op": "tail", "id": self.jid, "bytes": 60000}, timeout=3)
+            if r.get("ok") and r["text"] != self.ed.toPlainText():
+                bar = self.ed.verticalScrollBar()
+                end = bar.value() >= bar.maximum() - 4
+                self.ed.setPlainText(r["text"])
+                if end:
+                    bar.setValue(bar.maximum())
+        except Exception:
+            pass
+
+
 class Thumb(W.QLabel):
     """A clickable picture or file tile inside a chat bubble."""
-    def __init__(self, pixmap, path, size=150, on_click=None):
+    def __init__(self, pixmap, path, size=150, on_click=None, on_menu=None):
         super().__init__()
         self.path = path
         self.on_click = on_click
+        self.on_menu = on_menu
         self.setPixmap(pixmap)
         self.setFixedSize(pixmap.size())
         self.setCursor(Qt.PointingHandCursor)
         self.setToolTip(path)
         self.setStyleSheet("border-radius:8px;")
+
+    def contextMenuEvent(self, e):
+        if self.on_menu:
+            self.on_menu(e.globalPos())
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton and os.path.exists(self.path):
@@ -571,7 +559,29 @@ class Bubble(W.QFrame):
         self.lay.setContentsMargins(14, 10, 14, 10)
         self.lay.setSpacing(8)
         self.setMinimumWidth(300)
-        self.setMaximumWidth(620)
+        self.setMaximumWidth(640)
+
+    def header(self, name, icon_name=None, when="", color="#b4b8bf", chip=None):
+        """Who is speaking: small icon, name, then the time (and a status chip at the end)."""
+        h = W.QHBoxLayout()
+        h.setSpacing(6)
+        if icon_name:
+            ic = W.QLabel()
+            ic.setPixmap(icon(icon_name, color, 14).pixmap(14, 14))
+            h.addWidget(ic)
+        n = W.QLabel(name)
+        n.setStyleSheet("font-weight:600; font-size:9pt; color:%s;" % color)
+        h.addWidget(n)
+        if when:
+            w = W.QLabel(when)
+            w.setObjectName("muted")
+            w.setStyleSheet("font-size:8.5pt;")
+            w.setLayoutDirection(Qt.LeftToRight)
+            h.addWidget(w)
+        h.addStretch(1)
+        if chip is not None:
+            h.addWidget(chip)
+        self.lay.insertLayout(0, h)
 
     def text(self, t, muted=False, selectable=True):
         l = W.QLabel(t)
@@ -593,29 +603,28 @@ class Bubble(W.QFrame):
 
 
 class ChatPanel(W.QFrame):
-    """A normal chat with one model: you write (and drop a file), the model answers with its result. Built from the job history of that model."""
+    """A normal chat with one model: you write (or drop / paste a file), the model answers with its result. Built from the job history of that model."""
     def __init__(self, main):
         super().__init__()
         self.main = main
         self.setObjectName("editor")
         self.attached = None
         self.sig = None
-        v = W.QVBoxLayout(self)
-        v.setContentsMargins(12, 10, 12, 10)
+        self.fail_cache = {}
+        self.recall, self.recall_i = [], -1
+        outer = W.QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        self.th = ToolHeader("", "image")
+        self.title, self.path = self.th.title, self.th.sub
+        self.th.add_action("folder", "פתח את תיקיית התוצאות", main.open_model_folder)
+        self.th.add_action("help", "איך זה עובד?", lambda: self.explain())
+        outer.addWidget(self.th)
+        bodyw = W.QWidget()
+        v = W.QVBoxLayout(bodyw)
+        v.setContentsMargins(14, 10, 14, 12)
         v.setSpacing(8)
-        head = W.QHBoxLayout()
-        self.title = W.QLabel("")
-        self.title.setObjectName("h2")
-        self.path = W.QLabel("")
-        self.path.setObjectName("muted")
-        self.path.setLayoutDirection(Qt.LeftToRight)
-        b = W.QPushButton("פתח תיקייה")
-        b.setObjectName("tool")
-        b.clicked.connect(main.open_model_folder)
-        head.addWidget(self.title)
-        head.addWidget(self.path, 1)
-        head.addWidget(b)
-        v.addLayout(head)
+        outer.addWidget(bodyw, 1)
         self.scroll = W.QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(W.QFrame.NoFrame)
@@ -624,10 +633,9 @@ class ChatPanel(W.QFrame):
         self.scroll.viewport().setStyleSheet("background: transparent;")
         self.col = W.QVBoxLayout(self.body)
         self.col.setContentsMargins(0, 0, 6, 0)
-        self.col.setSpacing(10)
+        self.col.setSpacing(12)
         self.scroll.setWidget(self.body)
         v.addWidget(self.scroll, 1)
-        # composer
         self.comp = W.QFrame()
         self.comp.setObjectName("composer")
         cl = W.QVBoxLayout(self.comp)
@@ -635,46 +643,82 @@ class ChatPanel(W.QFrame):
         cl.setSpacing(6)
         self.chips = W.QHBoxLayout()
         cl.addLayout(self.chips)
-        self.drop_zone = W.QLabel("גרור לכאן תמונה, או לחץ ״בחר תמונה״ ואז ״צור דגם 3D״")
+        self.drop_zone = W.QLabel()
         self.drop_zone.setAlignment(Qt.AlignCenter)
-        self.drop_zone.setMinimumHeight(70)
-        self.drop_zone.setStyleSheet("border: 2px dashed #4e5157; border-radius: 12px; color: #868a91; padding: 14px;")
+        self.drop_zone.setMinimumHeight(64)
+        self.drop_zone.setStyleSheet("border: 1px dashed #4e5157; border-radius: 6px; color: #868a91; padding: 12px;")
         cl.addWidget(self.drop_zone)
         self.edit = W.QPlainTextEdit()
-        self.edit.setFixedHeight(62)
+        self.edit.setFixedHeight(58)
         self.edit.setLayoutDirection(Qt.LeftToRight)
         self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #dfe1e5; font-family: 'Segoe UI'; font-size: 10.5pt; }")
-        self.edit.setPlaceholderText("כתוב כאן מה לעשות…  (Enter לשליחה)")
+        self.edit.setPlaceholderText("כתוב כאן מה לעשות…")
         self.edit.installEventFilter(self)
         cl.addWidget(self.edit)
         row = W.QHBoxLayout()
-        self.attach_btn = W.QPushButton("צרף קובץ")
-        self.attach_btn.setObjectName("tool")
-        self.attach_btn.clicked.connect(self.pick)
-        self.adv_btn = W.QPushButton("מתקדם…")
-        self.adv_btn.setObjectName("tool")
-        self.adv_btn.clicked.connect(lambda: main.open_submit(main.model_first_type(), self.attached))
+        row.setSpacing(4)
+        self.hint_lbl = W.QLabel("Enter לשליחה   ·   Shift+Enter שורה חדשה   ·   Ctrl+V הדבקת תמונה")
+        self.hint_lbl.setObjectName("muted")
+        self.attach_btn = tool_button("clip", "צרף קובץ", self.pick)
+        self.adv_btn = tool_button("gear", "אפשרויות מתקדמות", lambda: main.open_submit(main.model_first_type(), self.attached))
         self.send_btn = W.QPushButton("שלח")
         self.send_btn.setObjectName("primary")
+        self.send_btn.setIcon(icon("send", "#ffffff", 16))
+        self.send_btn.setCursor(Qt.PointingHandCursor)
         self.send_btn.clicked.connect(self.send)
-        self.hint_lbl = W.QPushButton("איך זה עובד?")
-        self.hint_lbl.setObjectName("tool")
-        self.hint_lbl.clicked.connect(self.explain)
-        row.addWidget(self.send_btn)
-        row.addWidget(self.attach_btn)
-        row.addWidget(self.adv_btn)
-        row.addStretch(1)
         row.addWidget(self.hint_lbl)
+        row.addStretch(1)
+        row.addWidget(self.adv_btn)
+        row.addWidget(self.attach_btn)
+        row.addWidget(self.send_btn)
         cl.addLayout(row)
         v.addWidget(self.comp)
         self.setAcceptDrops(True)
 
     # --- input
     def eventFilter(self, obj, ev):
-        if obj is self.edit and ev.type() == QtCore.QEvent.KeyPress and ev.key() in (Qt.Key_Return, Qt.Key_Enter) and not (ev.modifiers() & Qt.ShiftModifier):
-            self.send()
-            return True
+        if obj is self.edit and ev.type() == QtCore.QEvent.KeyPress:
+            k, mod = ev.key(), ev.modifiers()
+            if k in (Qt.Key_Return, Qt.Key_Enter) and not (mod & Qt.ShiftModifier):
+                self.send()
+                return True
+            if ev.matches(QtGui.QKeySequence.Paste) and self.paste_attachment():
+                return True
+            if k == Qt.Key_Up and self.recall and (not self.edit.toPlainText().strip() or self.recall_i >= 0):
+                self.recall_i = min(self.recall_i + 1, len(self.recall) - 1)
+                self.edit.setPlainText(self.recall[-1 - self.recall_i])
+                return True
+            if k == Qt.Key_Down and self.recall_i >= 0:
+                self.recall_i -= 1
+                self.edit.setPlainText(self.recall[-1 - self.recall_i] if self.recall_i >= 0 else "")
+                return True
+            if k == Qt.Key_Escape and self.attached:
+                self.set_attached(None)
+                return True
         return super().eventFilter(obj, ev)
+
+    def paste_attachment(self):
+        tid, cfg = self.cfg()
+        if not (cfg and cfg.get("file")):
+            return False
+        cb = W.QApplication.clipboard()
+        md = cb.mimeData()
+        if md.hasUrls():
+            for u in md.urls():
+                if u.isLocalFile():
+                    self.set_attached(u.toLocalFile().replace("\\", "/"))
+                    return True
+        if md.hasImage():
+            img = cb.image()
+            if not img.isNull():
+                d = paths.HOME / "pasted"
+                d.mkdir(parents=True, exist_ok=True)
+                fp = d / ("paste_%s.png" % time.strftime("%Y%m%d_%H%M%S"))
+                img.save(str(fp))
+                self.set_attached(str(fp).replace("\\", "/"))
+                self.main.toast("התמונה הודבקה", "ok")
+                return True
+        return False
 
     def dragEnterEvent(self, e):
         if e.mimeData().hasUrls():
@@ -696,7 +740,7 @@ class ChatPanel(W.QFrame):
         self.attached = path
         tid, cfg = self.cfg()
         if cfg and not cfg.get("text"):
-            self.drop_zone.setText(("נבחרה תמונה: " + Path(path).name + "   (לחץ ״צור דגם 3D״)") if path else "גרור לכאן תמונה, או לחץ ״בחר תמונה״ ואז ״צור דגם 3D״")
+            self.drop_zone.setText(("נבחרה תמונה: " + Path(path).name + "   (לחץ ״צור דגם 3D״)") if path else "גרור לכאן תמונה, הדבק (Ctrl+V), או לחץ על הסיכה")
         while self.chips.count():
             it = self.chips.takeAt(0)
             if it.widget():
@@ -705,15 +749,13 @@ class ChatPanel(W.QFrame):
             pm = QtGui.QPixmap(path)
             if not pm.isNull():
                 t = W.QLabel()
-                t.setPixmap(pm.scaled(44, 44, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                t.setPixmap(pm.scaled(34, 34, Qt.KeepAspectRatio, Qt.SmoothTransformation))
                 self.chips.addWidget(t)
             lab = W.QLabel(Path(path).name)
             lab.setObjectName("muted")
-            x = W.QPushButton("הסר")
-            x.setObjectName("tool")
-            x.clicked.connect(lambda: self.set_attached(None))
+            lab.setLayoutDirection(Qt.LeftToRight)
             self.chips.addWidget(lab)
-            self.chips.addWidget(x)
+            self.chips.addWidget(tool_button("x", "הסר את הקובץ (Esc)", lambda: self.set_attached(None), size=13))
             self.chips.addStretch(1)
 
     def explain(self):
@@ -723,15 +765,13 @@ class ChatPanel(W.QFrame):
             txt = cfg["hint"]
             if cfg.get("examples"):
                 txt += nl + nl + "דוגמאות:" + nl + nl.join(cfg["examples"])
-            W.QMessageBox.information(self, "איך זה עובד", txt + nl + nl + "Enter שולח. Shift+Enter שורה חדשה.")
+            W.QMessageBox.information(self, "איך זה עובד", txt + nl + nl + "Enter שולח. Shift+Enter שורה חדשה. Ctrl+V מדביק תמונה מהלוח. חץ למעלה מחזיר הודעה קודמת.")
 
     def cfg(self):
         tid = self.main.model_first_type()
         return tid, (self.main.types.get(tid, {}).get("chat") if tid else None)
 
     def last_result_image(self):
-        for j in self.main.model_jobs():
-            pass
         best = None
         for j in self.main.model_jobs():
             d = j.get("outdir")
@@ -749,7 +789,7 @@ class ChatPanel(W.QFrame):
         params = {}
         if cfg.get("text"):
             if not text:
-                self.main.statusBar().showMessage("כתוב מה לעשות", 4000)
+                self.main.toast("כתוב מה לעשות", "warn")
                 return
             params[cfg["text"]] = text
         f = self.attached
@@ -757,7 +797,7 @@ class ChatPanel(W.QFrame):
             if not f and cfg.get("needs_file"):
                 f = self.last_result_image()          # keep talking: the next message edits the last result
             if not f and cfg.get("needs_file"):
-                self.main.statusBar().showMessage("צרף קובץ (גרור לכאן או ״צרף קובץ״)", 4000)
+                self.main.toast("צרף קובץ: גרור, הדבק (Ctrl+V) או לחץ על הסיכה", "warn")
                 return
             if f:
                 params[cfg["file"]] = f
@@ -765,19 +805,69 @@ class ChatPanel(W.QFrame):
         r = self.main.api(dict(op="submit", type=tid, params=params, name=name, requester="owner"))
         if r and r.get("ok"):
             self.edit.clear()
+            self.recall_i = -1
             self.set_attached(None)
             self.sig = None
             self.main.refresh_chat(force=True)
 
     # --- render
+    def onboarding(self, g, cfg):
+        card = W.QFrame()
+        card.setObjectName("bubble_model")
+        card.setMaximumWidth(660)
+        v = W.QVBoxLayout(card)
+        v.setContentsMargins(20, 18, 20, 18)
+        v.setSpacing(10)
+        top = W.QHBoxLayout()
+        top.setSpacing(12)
+        ic = W.QLabel()
+        ic.setPixmap(symbol_pixmap(g["sym"], g["color"], 44))
+        top.addWidget(ic)
+        tcol = W.QVBoxLayout()
+        tcol.setSpacing(0)
+        t = W.QLabel(g["title"])
+        t.setObjectName("h1")
+        sub = W.QLabel("עוד לא נשלחו עבודות. התחל כאן:" if cfg else "משמש בעיקר את Claude")
+        sub.setObjectName("muted")
+        tcol.addWidget(t)
+        tcol.addWidget(sub)
+        top.addLayout(tcol, 1)
+        v.addLayout(top)
+        hint = W.QLabel(cfg["hint"] if cfg else "לסוג הזה עדיין אין שיחה. אפשר לשלוח עבודה ידנית, והתוצאות יופיעו כאן.")
+        hint.setWordWrap(True)
+        v.addWidget(hint)
+        if cfg and cfg.get("examples"):
+            lab = W.QLabel("דוגמאות, לחץ כדי להעתיק לתיבה:")
+            lab.setObjectName("muted")
+            v.addWidget(lab)
+            holder = W.QWidget()
+            fl = FlowLayout(holder, 6)
+            for ex in cfg["examples"]:
+                btn = W.QPushButton(ex if len(ex) < 58 else ex[:56] + "…")
+                btn.setObjectName("pill")
+                btn.setToolTip(ex)
+                btn.setCursor(Qt.PointingHandCursor)
+                btn.setLayoutDirection(Qt.LeftToRight)
+                btn.clicked.connect(lambda _=False, e=ex: (self.edit.setPlainText(e), self.edit.setFocus()))
+                fl.addWidget(btn)
+            v.addWidget(holder)
+        elif not cfg:
+            btn = W.QPushButton("שלח עבודה ידנית…")
+            btn.clicked.connect(lambda: self.main.open_submit(self.main.model_first_type()))
+            v.addWidget(btn, 0, Qt.AlignRight)
+        return card
+
     def build(self, force=False):
         m = self.main
         tid, cfg = self.cfg()
         g = next((x for x in m.models if x["dir"] == m.sel_model), None)
-        self.title.setText(("שיחה עם: " + g["title"]) if g else "")
+        if g:
+            self.th.title.setText(g["title"])
+            self.th.set_icon(SYMBOL_ICON.get(g["sym"], "doc"), g["color"])
         self.path.setText(str(m.model_folder()))
         jobs = m.model_jobs()
-        sig = (m.sel_model, tuple((j["id"], j["state"], bool(j.get("held")), int(j.get("elapsed", 0)) // 5, len(self.outfiles(j)), sum(1 for f in self.outfiles(j) if f.lower().endswith(".glb") and (Path(f).parent / "preview" / "preview.png").exists())) for j in jobs), bool(cfg))
+        sig = (m.sel_model, tuple((j["id"], j["state"], bool(j.get("held")), int(j.get("elapsed", 0)) // 5, len(self.outfiles(j)),
+                                   sum(1 for f in self.outfiles(j) if f.lower().endswith(".glb") and (Path(f).parent / "preview" / "preview.png").exists())) for j in jobs), bool(cfg))
         if sig == self.sig and not force:
             return
         self.sig = sig
@@ -785,35 +875,21 @@ class ChatPanel(W.QFrame):
             it = self.col.takeAt(0)
             if it.widget():
                 it.widget().deleteLater()
-        can = bool(cfg)
-        self.comp.setVisible(can)
+        self.comp.setVisible(bool(cfg))
         has_text = bool(cfg and cfg.get("text"))
         has_file = bool(cfg and cfg.get("file"))
         self.edit.setVisible(has_text)
         self.drop_zone.setVisible(bool(cfg) and not has_text)
+        if cfg and not has_text and not self.attached:
+            self.drop_zone.setText("גרור לכאן תמונה, הדבק (Ctrl+V), או לחץ על הסיכה")
         self.attach_btn.setVisible(has_file)
-        self.attach_btn.setText("בחר תמונה" if not has_text else "צרף קובץ")
         self.send_btn.setText("שלח" if has_text and has_file else ("צייר" if has_text else "צור דגם 3D"))
-        self.hint_lbl.setVisible(bool(cfg))
+        self.hint_lbl.setVisible(bool(cfg) and has_text)
         self.adv_btn.setVisible(has_text)
-        # explanation bubble (always first)
-        b = Bubble("model")
-        if cfg:
-            b.text(cfg["hint"])
-            if cfg.get("examples"):
-                b.text("דוגמאות (לחץ כדי להעתיק לתיבה):", muted=True)
-                for ex in cfg["examples"]:
-                    btn = W.QPushButton(ex)
-                    btn.setObjectName("tool")
-                    btn.setLayoutDirection(Qt.LeftToRight)
-                    btn.clicked.connect(lambda _=False, e=ex: self.edit.setPlainText(e))
-                    b.lay.addWidget(btn)
-        else:
-            b.text("לסוג הזה עדיין אין שיחה. הוא משמש בעיקר את Claude. אפשר לשלוח עבודה ידנית דרך הכפתור למטה, והתוצאות יופיעו כאן.")
-            btn = W.QPushButton("שלח עבודה ידנית…")
-            btn.clicked.connect(lambda: m.open_submit(m.model_first_type()))
-            b.lay.addWidget(btn, 0, Qt.AlignRight)
-        self.col.addWidget(aligned(b, "model"))
+        if cfg and cfg.get("text"):
+            self.recall = [str((j.get("params") or {}).get(cfg["text"]) or "") for j in jobs if (j.get("params") or {}).get(cfg["text"])]
+        if not jobs and g:
+            self.col.addWidget(aligned(self.onboarding(g, cfg), "model"))
         for j in jobs:
             self.add_job(j, cfg)
         self.col.addStretch(1)
@@ -832,9 +908,37 @@ class ChatPanel(W.QFrame):
                         out.append(os.path.join(root, n))
         return out
 
+    def fail_text(self, j):
+        """The last meaningful lines of a failed job's output, shown right in the answer (no hunting through logs)."""
+        jid = j["id"]
+        if jid not in self.fail_cache:
+            lines = []
+            try:
+                r = client.call({"op": "tail", "id": jid, "bytes": 3500}, timeout=3)
+                lines = [l.strip() for l in (r.get("text") or "").splitlines() if l.strip() and not l.startswith("[broker]")]
+            except Exception:
+                pass
+            self.fail_cache[jid] = "\n".join(lines[-4:])[-600:]
+        return self.fail_cache[jid]
+
+    def act_button(self, icon_name, text, slot, tip=None):
+        b = W.QPushButton(text)
+        b.setObjectName("flat")
+        b.setIcon(icon(icon_name, "#868a91", 14))
+        b.setIconSize(QtCore.QSize(14, 14))
+        b.setCursor(Qt.PointingHandCursor)
+        if tip:
+            b.setToolTip(tip)
+        b.clicked.connect(slot)
+        return b
+
     def add_job(self, j, cfg):
+        m = self.main
         params = j.get("params") or {}
+        sym, color, ttl = m.type_info(j["type"])
+        when = time.strftime("%H:%M", time.localtime(j["submitted"])) if j.get("submitted") else ""
         u = Bubble("user")
+        u.header("אתה" if j["requester"] == "owner" else j["requester"], "user", "#%d   %s" % (j["id"], when))
         txt = params.get((cfg or {}).get("text") or "") if cfg else None
         if txt:
             u.text(str(txt))
@@ -845,17 +949,21 @@ class ChatPanel(W.QFrame):
                 u.row([Thumb(pm.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation), str(fp))])
         if not txt and not (fp and os.path.exists(str(fp))):
             u.text(j["name"])
-        u.text("#%d  •  %s" % (j["id"], j["requester"]), muted=True)
         self.col.addWidget(aligned(u, "user"))
-        a = Bubble("model")
         st = "held" if j["state"] == "queued" and j.get("held") else ("paused" if j.get("suspended") else j["state"])
+        dur = (j.get("finished") or 0) - (j.get("started") or j.get("finished") or 0)
+        chip = {"done": Chip("הושלם  %s" % fmt_dur(dur), "ok"), "failed": Chip("נכשל", "bad"), "cancelled": Chip("בוטל", "muted"), "lost": Chip("לא ידוע", "warn"),
+                "running": Chip("רץ  %s" % fmt_dur(j.get("elapsed", 0)), "info"), "paused": Chip("מוקפא", "warn"), "queued": Chip("ממתין", "muted"), "held": Chip("עצור", "warn")}.get(st)
+        a = Bubble("model")
+        a.header(ttl, SYMBOL_ICON.get(sym, "doc"), "", color, chip)
+        images = []
         if st in ("queued", "held"):
-            a.text("ממתין בתור: " + ("עצרת אותה בעצמך" if st == "held" else he_reason(j.get("reason", ""))), muted=True)
+            a.text("עצרת אותה בעצמך" if st == "held" else he_reason(j.get("reason", "")), muted=True)
         elif st in ("running", "paused"):
-            a.text("%s   •   עברו %d שניות   •   RAM %s" % ("עובד על זה" if st == "running" else "מוקפא", j.get("elapsed", 0), ltr("%.1f GB" % j.get("cur_ws", 0))))
+            a.text("RAM %s   •   עברו %d שניות" % (ltr("%.1f GB" % j.get("cur_ws", 0)), j.get("elapsed", 0)), muted=True)
             pb = W.QProgressBar()
             pb.setTextVisible(False)
-            pb.setFixedHeight(5)
+            pb.setFixedHeight(4)
             typ = j.get("typical_s")
             if typ and st == "running":
                 pb.setRange(0, 100)
@@ -866,50 +974,54 @@ class ChatPanel(W.QFrame):
                 a.text("עדיין אין נתונים על ריצות קודמות, אז אין הערכת זמן", muted=True)
             a.lay.addWidget(pb)
         elif st == "done":
-            dur = (j.get("finished") or 0) - (j.get("started") or j.get("finished") or 0)
-            a.text("מוכן (%s)" % fmt_dur(dur), muted=True)
             tiles = []
             for f in self.outfiles(j)[:8]:
                 if Path(f).suffix.lower() in IMG:
                     pm = QtGui.QPixmap(f)
                     if not pm.isNull():
-                        tiles.append(Thumb(pm.scaled(210, 210, Qt.KeepAspectRatio, Qt.SmoothTransformation), f))
+                        images.append(f)
+                        tiles.append(Thumb(pm.scaled(210, 210, Qt.KeepAspectRatio, Qt.SmoothTransformation), f, on_menu=lambda pos, p=f: m.send_menu(p, pos)))
                         continue
                 if f.lower().endswith(".glb"):
-                    tiles.append(self.main.glb_tile(f))
+                    tiles.append(m.glb_tile(f))
                     continue
-                sym, col = KIND.get(Path(f).suffix.lower(), ("▫", "#868a91"))
-                t = Thumb(symbol_pixmap(sym, col, 84), f)
+                s2, col = KIND.get(Path(f).suffix.lower(), ("▫", "#868a91"))
+                t = Thumb(symbol_pixmap(s2, col, 84), f)
                 t.setToolTip(f)
                 tiles.append(t)
             if tiles:
                 a.row(tiles)
-                names = W.QLabel("  ".join(Path(f).name for f in self.outfiles(j)[:4]))
+                names = W.QLabel("   ".join(Path(f).name for f in self.outfiles(j)[:4]))
                 names.setObjectName("muted")
                 names.setLayoutDirection(Qt.LeftToRight)
                 a.lay.addWidget(names)
         else:
-            a.text("%s (קוד %s). ראה פירוט בהיסטוריה." % ("נכשל" if st == "failed" else {"cancelled": "בוטל", "lost": "לא ידוע"}.get(st, st), j.get("rc")), muted=True)
+            if st == "failed":
+                ft = self.fail_text(j)
+                if ft:
+                    box = W.QLabel(ft)
+                    box.setWordWrap(True)
+                    box.setLayoutDirection(Qt.LeftToRight)
+                    box.setTextInteractionFlags(Qt.TextSelectableByMouse)
+                    box.setStyleSheet("font-family: Consolas; font-size: 9pt; color: #db5c5c; background: #1e1f22; border-radius: 4px; padding: 6px 8px;")
+                    a.lay.addWidget(box)
+            elif st == "cancelled":
+                a.text("העבודה בוטלה.", muted=True)
         row = W.QHBoxLayout()
+        row.setSpacing(2)
         if st in ("done", "failed", "cancelled"):
-            rb = W.QPushButton("הרץ שוב")
-            rb.setObjectName("tool")
-            rb.clicked.connect(lambda _=False, i=j["id"]: self.main.rerun_job(i))
-            row.addWidget(rb)
+            row.addWidget(self.act_button("refresh", "הרץ שוב", lambda _=False, i=j["id"]: m.rerun_job(i), "אותן הגדרות, תיקייה חדשה"))
             if j.get("outdir"):
-                ob = W.QPushButton("פתח תיקייה")
-                ob.setObjectName("tool")
-                ob.clicked.connect(lambda _=False, d=j["outdir"]: os.startfile(d) if os.path.isdir(d) else None)
-                row.addWidget(ob)
+                row.addWidget(self.act_button("folder", "תיקייה", lambda _=False, d=j["outdir"]: os.startfile(d) if os.path.isdir(d) else None))
+            if images:
+                row.addWidget(self.act_button("arrow", "שלח אל…", lambda _=False, p=images[0]: m.send_menu(p, QtGui.QCursor.pos()), "המשך עם התמונה במודל אחר"))
+            if st == "failed":
+                row.addWidget(self.act_button("doc", "פלט מלא", lambda _=False, i=j["id"], n=j["name"]: m.show_output(i, n)))
         if st in ("queued", "held", "running", "paused"):
-            cb = W.QPushButton("בטל")
-            cb.setObjectName("tool")
-            cb.clicked.connect(lambda _=False, i=j["id"]: self.main.api({"op": "cancel", "id": i}))
-            row.addWidget(cb)
+            row.addWidget(self.act_button("x", "בטל", lambda _=False, i=j["id"]: m.api({"op": "cancel", "id": i})))
         row.addStretch(1)
         a.lay.addLayout(row)
         self.col.addWidget(aligned(a, "model"))
-
 
 
 class AssistantPanel(W.QFrame):
@@ -926,28 +1038,24 @@ class AssistantPanel(W.QFrame):
         self.denial_ui = []
         self.turn_text = False
         self.qs = QtCore.QSettings("ai-broker", "assistant")
-        v = W.QVBoxLayout(self)
-        v.setContentsMargins(12, 10, 12, 10)
-        v.setSpacing(8)
-        head = W.QHBoxLayout()
-        t = W.QLabel("עוזר Claude")
-        t.setObjectName("h2")
-        sub = W.QLabel("שאל על המחשב והמודלים, בקש להריץ עבודות, או להמליץ ולהוריד (רק באישור שלך)")
-        sub.setObjectName("muted")
+        outer = W.QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        th = ToolHeader("עוזר Claude", "sparkles", "")
         self.model_box = W.QComboBox()
         for key, label in (("haiku", "מהיר וזול (Haiku)"), ("sonnet", "חכם יותר (Sonnet)"), ("default", "ברירת מחדל של החשבון")):
             self.model_box.addItem(label, key)
         i = self.model_box.findData(self.qs.value("model", "haiku"))
         self.model_box.setCurrentIndex(max(0, i))
         self.model_box.currentIndexChanged.connect(lambda: self.qs.setValue("model", self.model_box.currentData()))
-        new = W.QPushButton("שיחה חדשה")
-        new.setObjectName("tool")
-        new.clicked.connect(self.reset)
-        head.addWidget(t)
-        head.addWidget(sub, 1)
-        head.addWidget(self.model_box)
-        head.addWidget(new)
-        v.addLayout(head)
+        th.h.addWidget(self.model_box)
+        th.add_action("refresh", "שיחה חדשה", self.reset)
+        outer.addWidget(th)
+        bodyw = W.QWidget()
+        v = W.QVBoxLayout(bodyw)
+        v.setContentsMargins(14, 10, 14, 12)
+        v.setSpacing(8)
+        outer.addWidget(bodyw, 1)
         self.scroll = W.QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(W.QFrame.NoFrame)
@@ -983,6 +1091,7 @@ class AssistantPanel(W.QFrame):
         self.send_btn = W.QPushButton("שלח")
         self.send_btn.setObjectName("primary")
         self.send_btn.clicked.connect(self.on_send_click)
+        self.send_btn.setIcon(icon("send", "#ffffff", 16))
         row.addWidget(self.send_btn)
         row.addStretch(1)
         cl.addLayout(row)
@@ -998,6 +1107,7 @@ class AssistantPanel(W.QFrame):
     # --- bubbles
     def add_bubble(self, role, text, save=True, md=False):
         b = Bubble("user" if role == "user" else "model")
+        b.header("אתה" if role == "user" else "Claude", "user" if role == "user" else "sparkles")
         l = b.text(text)
         if md:
             l.setTextFormat(Qt.MarkdownText)
@@ -1091,6 +1201,7 @@ class AssistantPanel(W.QFrame):
         self.pending = []
         for d in items:
             b = Bubble("model")
+            b.header("Claude", "sparkles", "מבקש אישור", "#e0a030")
             b.text("Claude מבקש רשות " + assistant.describe_denial(d))
             row = W.QHBoxLayout()
             yes = W.QPushButton("אשר")
@@ -1124,7 +1235,8 @@ class AssistantPanel(W.QFrame):
 class Main(W.QMainWindow):
     def __init__(self, tray=True, model=None):
         super().__init__()
-        self.setWindowTitle("מנהל העבודות של ה-AI")
+        self.setWindowTitle("AI Broker")
+        self.setMinimumSize(960, 620)
         self.setWindowIcon(make_icon())
         self.resize(1280, 800)
         self.state = None
@@ -1142,13 +1254,41 @@ class Main(W.QMainWindow):
         self.hist_jobs = []
         self.assistant_mode = False
         self.preview_asked = set()
+        self.persist = True
+        self.zoom = 1.0
+        self.type_dir = {}
         self.setAcceptDrops(True)
         self._build()
+        self.toaster = Toast(self.centralWidget())
         self.tray = None
         if tray and W.QSystemTrayIcon.isSystemTrayAvailable():
             self._build_tray()
         self.settings = QtCore.QSettings("ai-broker", "gui3")
+        st = self.settings
+        try:
+            self.zoom = max(0.8, min(1.5, float(st.value("zoom", 1.0) or 1.0)))
+        except (TypeError, ValueError):
+            self.zoom = 1.0
+        if abs(self.zoom - 1.0) > 0.01:
+            W.QApplication.instance().setStyleSheet(qss(self.zoom))
+        if st.value("geometry"):
+            self.restoreGeometry(st.value("geometry"))
         self.fit_to_screen()
+        for name, sp in (("split_main", self.split_main), ("split_center", self.split_center)):
+            if st.value(name):
+                sp.restoreState(st.value(name))
+        if self.sel_model is None:
+            last = st.value("last_model", None)
+            if last == "__assistant__":
+                self.assistant_mode = True
+            elif last:
+                self.sel_model = last
+        if not st.value("tip_shown") and self.persist:
+            QtCore.QTimer.singleShot(2500, lambda: (self.toast("טיפ: Ctrl+K פותח חיפוש מהיר של מודלים ופעולות", "info", "הבנתי", None, 8000), st.setValue("tip_shown", True)))
+        for seq, fn in (("Ctrl+K", self.open_palette), ("Ctrl+=", lambda: self.zoom_by(0.1)), ("Ctrl++", lambda: self.zoom_by(0.1)), ("Ctrl+-", lambda: self.zoom_by(-0.1)),
+                        ("Ctrl+0", lambda: self.zoom_by(0, True)), ("Ctrl+L", self.focus_composer)):
+            sc = QtGui.QShortcut(QtGui.QKeySequence(seq), self)
+            sc.activated.connect(fn)
         self.poller = Poller()
         self.poller.got.connect(self.on_state)
         self.poller.down.connect(self.on_down)
@@ -1159,12 +1299,38 @@ class Main(W.QMainWindow):
         t.start(3000)
 
     def fit_to_screen(self):
-        """Open at a size that fits the screen the window is on, centred; never half off-screen (also if a saved geometry came from a bigger screen)."""
+        """Never half off-screen: shrink to the screen the window is on and pull it back inside (also if a saved geometry came from a bigger screen)."""
         scr = (self.screen() or W.QApplication.primaryScreen()).availableGeometry()
-        w = min(self.width(), int(scr.width() * 0.92))
-        h = min(self.height(), int(scr.height() * 0.92))
+        w = min(self.width(), int(scr.width() * 0.96))
+        h = min(self.height(), int(scr.height() * 0.94))
         self.resize(max(900, w), max(620, h))
-        self.move(scr.left() + (scr.width() - self.width()) // 2, scr.top() + (scr.height() - self.height()) // 2)
+        fg = self.frameGeometry()
+        if not scr.contains(fg.topLeft()) or not scr.contains(fg.bottomRight()):
+            self.move(scr.left() + (scr.width() - self.width()) // 2, scr.top() + (scr.height() - self.height()) // 2)
+
+    def showEvent(self, e):
+        style_titlebar(int(self.winId()))
+        super().showEvent(e)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if getattr(self, "toaster", None) and self.toaster.isVisible():
+            self.toaster.place()
+
+    def toast(self, text, kind="info", action=None, fn=None, ms=4200):
+        self.toaster.show_message(text, kind, action, fn, ms)
+
+    def zoom_by(self, d, reset=False):
+        self.zoom = 1.0 if reset else max(0.8, min(1.5, round(self.zoom + d, 2)))
+        W.QApplication.instance().setStyleSheet(qss(self.zoom))
+        self.settings.setValue("zoom", self.zoom)
+        self.toast("גודל הטקסט: %d%%" % round(self.zoom * 100), "info")
+
+    def focus_composer(self):
+        if self.assistant_mode:
+            self.assistant_panel.edit.setFocus()
+        elif self.sel_model:
+            (self.chat.edit if self.chat.edit.isVisible() else self.chat).setFocus()
 
     # ------------------------------------------------------------ build
     def _panel(self):
@@ -1224,7 +1390,8 @@ class Main(W.QMainWindow):
         adv.clicked.connect(self.open_advanced)
         ask = tb("sparkles", "עוזר", "שיחה עם Claude בתוך התוכנה: שאלות על המחשב והמודלים, הרצת עבודות, והמלצה והורדה של מודלים (באישור שלך)", "tb")
         ask.clicked.connect(self.open_claude)
-        for b_ in (ask, self.play, self.pause, adv):
+        pal = tool_button("search", "חיפוש פעולות ומודלים (Ctrl+K)", lambda: self.open_palette(), size=17)
+        for b_ in (pal, ask, self.play, self.pause, adv):
             head.addWidget(b_)
         v.addWidget(bar)
         split = W.QSplitter(Qt.Horizontal)
@@ -1236,60 +1403,68 @@ class Main(W.QMainWindow):
         v.addWidget(body, 1)
         mp = self._panel()
         ml = W.QVBoxLayout(mp)
-        ml.setContentsMargins(8, 12, 8, 8)
-        t = W.QLabel("  מודלים ותוצאות")
-        t.setObjectName("h2")
-        ml.addWidget(t)
+        ml.setContentsMargins(0, 0, 0, 6)
+        ml.setSpacing(0)
+        mh = ToolHeader("מודלים ותוצאות", "grid")
+        mh.add_action("folder", "פתח את תיקיית הפלט", lambda: self.open_folder(None if self.assistant_mode else self.sel_model))
+        ml.addWidget(mh)
         self.model_list = W.QListWidget()
         self.model_list.setObjectName("models")
-        self.model_list.setIconSize(QtCore.QSize(20, 20))
+        self.model_list.setItemDelegate(ModelDelegate(self.model_list))
+        self.model_list.setMouseTracking(True)
+        self.model_list.setVerticalScrollMode(W.QAbstractItemView.ScrollPerPixel)
         self.model_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.model_list.currentRowChanged.connect(self.on_model)
         self.model_list.setContextMenuPolicy(Qt.CustomContextMenu)
         self.model_list.customContextMenuRequested.connect(self.model_menu)
-        self.model_list.itemDoubleClicked.connect(lambda it: self.open_folder(it.data(Qt.UserRole)))
+        self.model_list.itemDoubleClicked.connect(lambda it: self.open_folder(it.data(Qt.UserRole)) if it.data(ROLE_KIND) == "item" and it.data(Qt.UserRole) != "__assistant__" else None)
         ml.addWidget(self.model_list, 1)
-        mp.setMinimumWidth(250)
-        mp.setMaximumWidth(290)
+        mp.setMinimumWidth(190)
+        mp.setMaximumWidth(300)
         split.addWidget(mp)
+        self.split_main = split
         cs = W.QSplitter(Qt.Vertical)
         cs.setChildrenCollapsible(False)
         top = self._panel()
         tl = W.QVBoxLayout(top)
-        tl.setContentsMargins(8, 4, 8, 8)
+        tl.setContentsMargins(0, 0, 0, 0)
+        tl.setSpacing(0)
         self.tabs = W.QTabWidget()
+        self.tabs.setDocumentMode(True)
         qw = W.QWidget()
         ql = W.QVBoxLayout(qw)
-        ql.setContentsMargins(0, 6, 0, 0)
-        tb = W.QHBoxLayout()
-        self.btns = {}
-        for key, text, tip in (("top", "⇈  הרץ ראשונה", "להקדים לראש התור"), ("up", "▲", "להקדים"), ("down", "▼", "לדחות"), ("hold", "עצור / שחרר", "לעצור או לשחרר את העבודה"),
-                               ("cancel", "בטל", "לבטל (אם רצה, תיעצר)")):
-            b = W.QPushButton(text)
-            b.setObjectName("tool")
-            b.setToolTip(tip)
-            b.clicked.connect(lambda _=False, k=key: self.queue_action(k))
-            tb.addWidget(b)
-            self.btns[key] = b
-        tb.addStretch(1)
-        hint = W.QLabel("אפשר גם לגרור שורות ממתינות")
-        hint.setObjectName("muted")
-        tb.addWidget(hint)
-        ql.addLayout(tb)
+        ql.setContentsMargins(8, 2, 8, 8)
         self.queue = QueueTable()
         self.queue.reorder.connect(lambda ids, pos: self.api({"op": "move", "ids": ids, "to": pos}))
         self.queue.setContextMenuPolicy(Qt.CustomContextMenu)
         self.queue.customContextMenuRequested.connect(self.queue_menu)
-        ql.addWidget(self.queue, 1)
-        self.q_empty = W.QLabel("אין עבודות ברגע זה")
-        self.q_empty.setObjectName("muted")
-        self.q_empty.setAlignment(Qt.AlignCenter)
-        ql.addWidget(self.q_empty)
+        self.queue.itemDoubleClicked.connect(lambda it: self.show_job(self.queue.job_ids[it.row()]) if it.row() < len(self.queue.job_ids) else None)
+        dsc = QtGui.QShortcut(QtGui.QKeySequence(Qt.Key_Delete), self.queue)
+        dsc.setContext(Qt.WidgetShortcut)
+        dsc.activated.connect(lambda: self.queue_action("cancel"))
+        empty = W.QWidget()
+        ev = W.QVBoxLayout(empty)
+        ev.setAlignment(Qt.AlignCenter)
+        ei = W.QLabel()
+        ei.setPixmap(icon_pixmap("list", "#6f737a", 30))
+        ei.setAlignment(Qt.AlignCenter)
+        et = W.QLabel("אין עבודות בתור")
+        et.setObjectName("big")
+        et.setAlignment(Qt.AlignCenter)
+        es = W.QLabel("עבודות ש-Claude או אתה שולחים יופיעו כאן. אפשר לגרור שורות ממתינות כדי לשנות סדר.")
+        es.setObjectName("muted")
+        es.setAlignment(Qt.AlignCenter)
+        for w_ in (ei, et, es):
+            ev.addWidget(w_)
+        self.q_stack = W.QStackedWidget()
+        self.q_stack.addWidget(empty)
+        self.q_stack.addWidget(self.queue)
+        ql.addWidget(self.q_stack, 1)
         self.tabs.addTab(qw, "תור")
         self.hist = W.QTableWidget(0, 7)
         self.hist.setHorizontalHeaderLabels(["#", "סוג", "עבודה", "ביקש", "תוצאה", "זמן", "שיא RAM / GPU"])
         self.hist.verticalHeader().hide()
-        self.hist.verticalHeader().setDefaultSectionSize(34)
+        self.hist.verticalHeader().setDefaultSectionSize(32)
         self.hist.setAlternatingRowColors(True)
         self.hist.setShowGrid(False)
         self.hist.setEditTriggers(W.QAbstractItemView.NoEditTriggers)
@@ -1300,16 +1475,16 @@ class Main(W.QMainWindow):
         self.hist.itemDoubleClicked.connect(self.hist_open)
         hw = W.QWidget()
         hl = W.QVBoxLayout(hw)
-        hl.setContentsMargins(0, 6, 0, 0)
+        hl.setContentsMargins(8, 4, 8, 8)
         hb = W.QHBoxLayout()
-        rb = W.QPushButton("הרץ שוב עם אותן הגדרות")
-        rb.setObjectName("tool")
-        rb.clicked.connect(self.hist_rerun)
-        ob = W.QPushButton("פתח את תיקיית התוצאה")
-        ob.setObjectName("tool")
-        ob.clicked.connect(lambda: self.hist_open(self.hist.currentItem()) if self.hist.currentItem() else None)
-        hb.addWidget(rb)
-        hb.addWidget(ob)
+        hb.setSpacing(2)
+        for ic_, tx_, fn_ in (("refresh", "הרץ שוב עם אותן הגדרות", self.hist_rerun),
+                              ("folder", "פתח את תיקיית התוצאה", lambda: self.hist_open(self.hist.currentItem()) if self.hist.currentItem() else None)):
+            b_ = W.QPushButton(tx_)
+            b_.setObjectName("flat")
+            b_.setIcon(icon(ic_, "#868a91", 14))
+            b_.clicked.connect(lambda _=False, f=fn_: f())
+            hb.addWidget(b_)
         hb.addStretch(1)
         hint = W.QLabel("לחיצה כפולה על שורה פותחת את התיקייה")
         hint.setObjectName("muted")
@@ -1319,23 +1494,29 @@ class Main(W.QMainWindow):
         self.hist.customContextMenuRequested.connect(self.hist_menu)
         hl.addWidget(self.hist, 1)
         self.tabs.addTab(hw, "היסטוריה")
+        corner = W.QWidget()
+        ch = W.QHBoxLayout(corner)
+        ch.setContentsMargins(0, 0, 6, 0)
+        ch.setSpacing(2)
+        self.btns = {}
+        for key, ic_, tip in (("top", "top", "הרץ ראשונה"), ("up", "up", "הקדם בתור"), ("down", "down", "דחה בתור"), ("hold", "pause", "עצור / שחרר את העבודה"), ("cancel", "x", "בטל את העבודה")):
+            b_ = tool_button(ic_, tip, lambda _=False, k=key: self.queue_action(k))
+            ch.addWidget(b_)
+            self.btns[key] = b_
+        self.tabs.setCornerWidget(corner, Qt.TopLeftCorner)
+        self.tabs.currentChanged.connect(lambda i: corner.setVisible(i == 0))
         tl.addWidget(self.tabs)
         outp = self._panel()
         ol = W.QVBoxLayout(outp)
-        ol.setContentsMargins(12, 10, 12, 10)
-        oh = W.QHBoxLayout()
-        self.out_title = W.QLabel("תוצאות")
-        self.out_title.setObjectName("h2")
-        self.out_path = W.QLabel("")
-        self.out_path.setObjectName("muted")
-        self.out_path.setLayoutDirection(Qt.LeftToRight)
-        self.open_btn = W.QPushButton("פתח תיקייה")
-        self.open_btn.setObjectName("tool")
-        self.open_btn.clicked.connect(self.open_model_folder)
-        oh.addWidget(self.out_title)
-        oh.addWidget(self.out_path, 1)
-        oh.addWidget(self.open_btn)
-        ol.addLayout(oh)
+        ol.setContentsMargins(0, 0, 0, 0)
+        ol.setSpacing(0)
+        gh = ToolHeader("כל התוצאות", "grid")
+        self.out_title, self.out_path = gh.title, gh.sub
+        gh.add_action("folder", "פתח את תיקיית הפלט", self.open_model_folder)
+        ol.addWidget(gh)
+        gb = W.QWidget()
+        gl = W.QVBoxLayout(gb)
+        gl.setContentsMargins(10, 8, 10, 10)
         self.files = W.QListWidget()
         self.files.setObjectName("files")
         self.files.setViewMode(W.QListView.IconMode)
@@ -1346,14 +1527,14 @@ class Main(W.QMainWindow):
         self.files.setWordWrap(True)
         self.files.setUniformItemSizes(True)
         self.files.itemDoubleClicked.connect(lambda it: self.open_file(it.data(Qt.UserRole)))
-        self.files.itemClicked.connect(lambda it: self.open_submit(self.model_first_type()) if it.data(Qt.UserRole) == "__new__" else None)
         self.files.setContextMenuPolicy(Qt.CustomContextMenu)
         self.files.customContextMenuRequested.connect(self.files_menu)
-        ol.addWidget(self.files, 1)
+        gl.addWidget(self.files, 1)
         self.files_empty = W.QLabel("")
         self.files_empty.setObjectName("muted")
         self.files_empty.setAlignment(Qt.AlignCenter)
-        ol.addWidget(self.files_empty)
+        gl.addWidget(self.files_empty)
+        ol.addWidget(gb, 1)
         self.chat = ChatPanel(self)
         self.assistant_panel = AssistantPanel(self)
         self.lower = W.QStackedWidget()
@@ -1363,44 +1544,99 @@ class Main(W.QMainWindow):
         cs.addWidget(self.lower)
         cs.addWidget(top)
         cs.setSizes([600, 170])
+        self.split_center = cs
         split.addWidget(cs)
         rp = self._panel()
-        rl = W.QVBoxLayout(rp)
-        rl.setContentsMargins(16, 12, 16, 12)
-        t = W.QLabel("משאבים")
-        t.setObjectName("h2")
-        rl.addWidget(t)
-        self.g_ram, self.g_gpu, self.g_disk, self.g_cpu = Gauge("RAM"), Gauge("GPU (VRAM)"), Gauge("דיסק"), Gauge("CPU")
+        rv = W.QVBoxLayout(rp)
+        rv.setContentsMargins(0, 0, 0, 0)
+        rv.setSpacing(0)
+        rv.addWidget(ToolHeader("משאבים", "cpu"))
+        rb = W.QWidget()
+        rl = W.QVBoxLayout(rb)
+        rl.setContentsMargins(14, 8, 14, 12)
+        rl.setSpacing(4)
+        rv.addWidget(rb, 1)
+        self.g_ram, self.g_gpu = Gauge("RAM", "layers"), Gauge("GPU (VRAM)", "cpu")
+        self.g_disk, self.g_cpu = Gauge("דיסק", "hdd"), Gauge("CPU", "chart")
         for g in (self.g_ram, self.g_gpu, self.g_disk, self.g_cpu):
             rl.addWidget(g)
-        t = W.QLabel("מגבלות (רכות, אפשר לשנות תוך כדי)")
+        t = W.QLabel("מגבלות")
         t.setObjectName("h2")
-        t.setContentsMargins(0, 8, 0, 0)
+        t.setContentsMargins(0, 10, 0, 0)
+        t.setToolTip("מגבלות רכות: המערכת מכניסה כמה שיותר עבודות בתוכן, ואפשר לשנות אותן תוך כדי ריצה")
         rl.addWidget(t)
         self.sl = {}
         for key, label, lo, hi in (("ram_gb", "RAM ל-AI", 4, 62), ("vram_gb", "GPU ל-AI", 2, 16), ("max_jobs", "עבודות במקביל", 1, 8), ("reserve_ram_gb", "RAM שנשאר פנוי", 0, 24), ("disk_busy_pct", "עומס דיסק מרבי", 50, 100)):
             row = W.QHBoxLayout()
             lab = W.QLabel(label)
-            s = W.QSlider(Qt.Horizontal)
-            s.setLayoutDirection(Qt.LeftToRight)
-            s.setRange(lo, hi)
+            s_ = W.QSlider(Qt.Horizontal)
+            s_.setLayoutDirection(Qt.LeftToRight)
+            s_.setRange(lo, hi)
             val = W.QLabel("")
             val.setMinimumWidth(52)
             val.setStyleSheet("font-weight:600;")
-            s.valueChanged.connect(lambda x, l=val, k=key: l.setText(fmt_limit(k, x)))
-            s.sliderReleased.connect(lambda k=key, sl=s: self.set_limit(k, sl.value()))
+            val.setLayoutDirection(Qt.LeftToRight)
+            s_.valueChanged.connect(lambda x, l=val, k=key: l.setText(fmt_limit(k, x)))
+            s_.sliderReleased.connect(lambda k=key, sl=s_: self.set_limit(k, sl.value()))
             row.addWidget(lab, 2)
-            row.addWidget(s, 3)
+            row.addWidget(s_, 3)
             row.addWidget(val)
             rl.addLayout(row)
-            self.sl[key] = (s, val)
+            self.sl[key] = (s_, val)
+        t2 = W.QLabel("היום")
+        t2.setObjectName("h2")
+        t2.setContentsMargins(0, 12, 0, 0)
+        rl.addWidget(t2)
+        card = W.QFrame()
+        card.setObjectName("statcard")
+        cv = W.QVBoxLayout(card)
+        cv.setContentsMargins(12, 10, 12, 10)
+        cv.setSpacing(7)
+        self.stat = {}
+        for key, ic_, label in (("done", "check", "עבודות שהסתיימו"), ("time", "clock", "זמן ריצה כולל"), ("ram", "layers", "שיא RAM של עבודה")):
+            r_ = W.QHBoxLayout()
+            il = W.QLabel()
+            il.setPixmap(icon_pixmap(ic_, "#868a91", 14))
+            ll = W.QLabel(label)
+            ll.setObjectName("muted")
+            vl = W.QLabel("-")
+            vl.setLayoutDirection(Qt.LeftToRight)
+            vl.setStyleSheet("font-weight:600;")
+            r_.addWidget(il)
+            r_.addWidget(ll)
+            r_.addStretch(1)
+            r_.addWidget(vl)
+            cv.addLayout(r_)
+            self.stat[key] = vl
+        rl.addWidget(card)
         rl.addStretch(1)
         rp.setMinimumWidth(270)
-        rp.setMaximumWidth(320)
+        rp.setMaximumWidth(330)
         split.addWidget(rp)
-        split.setSizes([260, 720, 280])
-        self.sb = W.QLabel("")
-        self.statusBar().addWidget(self.sb, 1)
+        split.setSizes([250, 740, 290])
+        sb = self.statusBar()
+        sb.setSizeGripEnabled(False)
+
+        def sep():
+            f_ = W.QFrame()
+            f_.setFixedSize(1, 14)
+            f_.setStyleSheet("background:#43454a;")
+            return f_
+        w0 = W.QWidget()
+        h0 = W.QHBoxLayout(w0)
+        h0.setContentsMargins(8, 0, 8, 0)
+        h0.setSpacing(6)
+        self.sd_dot = Dot(8)
+        self.sd_lbl = W.QLabel("מתחבר…")
+        h0.addWidget(self.sd_dot)
+        h0.addWidget(self.sd_lbl)
+        self.s_ram, self.s_commit, self.s_lock = Seg("layers", ""), Seg("hdd", ""), Seg("alert", "")
+        self.s_lock.setVisible(False)
+        for w_ in (w0, sep(), self.s_ram, sep(), self.s_commit, self.s_lock):
+            sb.addWidget(w_)
+        self.task = TaskWidget()
+        self.task.clicked.connect(self.on_task_click)
+        sb.addPermanentWidget(self.task)
 
     def _build_tray(self):
         self.tray = W.QSystemTrayIcon(make_icon(), self)
@@ -1419,10 +1655,10 @@ class Main(W.QMainWindow):
         try:
             r = client.call(req, timeout=5)
             if not r.get("ok"):
-                self.statusBar().showMessage("שגיאה: " + str(r.get("error")), 6000)
+                self.toast("שגיאה: " + str(r.get("error"))[:160], "bad")
             return r
         except Exception as e:
-            self.statusBar().showMessage("אין חיבור לשירות: %s" % e, 6000)
+            self.toast("אין חיבור לשירות", "bad")
 
     def set_limit(self, key, v):
         if not self.building:
@@ -1526,8 +1762,7 @@ class Main(W.QMainWindow):
     def rerun_job(self, jid):
         r = self.api({"op": "rerun", "id": jid})
         if r and r.get("ok"):
-            self.statusBar().showMessage("נוספה עבודה חוזרת מספר %d" % r["id"], 5000)
-            self.tabs.setCurrentIndex(0)
+            self.toast("נוספה עבודה חוזרת #%d" % r["id"], "ok", "הצג בתור", lambda: self.tabs.setCurrentIndex(0))
 
     def open_submit(self, preselect=None, prefill=None):
         if not self.types:
@@ -1536,8 +1771,60 @@ class Main(W.QMainWindow):
         if dlg.exec() == W.QDialog.Accepted:
             r = self.api(dlg.request())
             if r and r.get("ok"):
-                self.statusBar().showMessage("נוספה עבודה מספר %d" % r["id"], 5000)
-                self.tabs.setCurrentIndex(0)
+                self.toast("נוספה עבודה #%d" % r["id"], "ok", "הצג בתור", lambda: self.tabs.setCurrentIndex(0))
+
+    def show_output(self, jid, title):
+        OutputDialog(self, jid, title).exec()
+
+    def select_model(self, od):
+        for i in range(self.model_list.count()):
+            if self.model_list.item(i).data(Qt.UserRole) == od and self.model_list.item(i).data(ROLE_KIND) == "item":
+                self.model_list.setCurrentRow(i)
+                return True
+        return False
+
+    def send_menu(self, path, pos=None):
+        """Right-click on a picture: continue with it in another model (edit it, turn it into a 3D model...)."""
+        if not path or Path(path).suffix.lower() not in IMG:
+            return
+        m = W.QMenu(self)
+        head = m.addAction("שלח את התמונה אל:")
+        head.setEnabled(False)
+        for g in self.models:
+            cfg = (self.types.get(g["tids"][0], {}).get("chat") or {})
+            if cfg.get("file"):
+                m.addAction(sym_icon(g["sym"], g["color"], 16), "%s   ·   %s" % (cfg.get("send_label") or g["title"], g["title"]), lambda od=g["dir"], p_=path: self.send_to(od, p_))
+        m.addSeparator()
+        m.addAction(icon("folder", "#b4b8bf", 16), "פתח את התמונה", lambda: os.startfile(path))
+        m.addAction(icon("copy", "#b4b8bf", 16), "העתק נתיב", lambda: W.QApplication.clipboard().setText(path))
+        m.exec(pos or QtGui.QCursor.pos())
+
+    def send_to(self, od, path):
+        if self.select_model(od):
+            self.chat.set_attached(path)
+            self.chat.edit.setFocus()
+            self.toast("התמונה צורפה. כתוב מה לעשות ושלח", "ok")
+
+    def open_palette(self):
+        items = [("עוזר Claude", "sparkles", "שיחה", lambda: self.select_model("__assistant__") or self.model_list.setCurrentRow(0)),
+                 ("כל התוצאות", "grid", "גלריה", lambda: self.select_model(None))]
+        for g in self.models:
+            items.append(("מעבר אל: " + g["title"], SYMBOL_ICON.get(g["sym"], "doc"), "מודל", lambda od=g["dir"]: self.select_model(od)))
+        paused = bool(self.state and self.state.get("paused"))
+        items += [("המשך את כל העבודות" if paused else "עצור את כל העבודות", "play" if paused else "pause", "תור", lambda: self.pause.click()),
+                  ("מצב משחק / הקלטה", "gamepad", "מתג", lambda: self.play.click()),
+                  ("פתח את תיקיית הפלט", "folder", "קבצים", lambda: self.open_folder(None)),
+                  ("מתקדם: מגבלות, חיבור ל-Claude Code, הפעלה עם Windows", "gear", "הגדרות", self.open_advanced),
+                  ("הגדל טקסט", "zoomin", "Ctrl +", lambda: self.zoom_by(0.1)),
+                  ("הקטן טקסט", "zoomin", "Ctrl -", lambda: self.zoom_by(-0.1)),
+                  ("גודל טקסט רגיל", "zoomin", "Ctrl 0", lambda: self.zoom_by(0, True))]
+        Palette(self, items).popup()
+
+    def on_task_click(self, job):
+        if job:
+            od = self.type_dir.get(job["type"])
+            if od:
+                self.select_model(od)
 
     def open_claude(self):
         self.model_list.setCurrentRow(0)          # the assistant is the first entry of the list
@@ -1557,13 +1844,17 @@ class Main(W.QMainWindow):
             if t.get("hidden"):
                 continue
             od = t.get("output_dir") or tid
-            g = groups.setdefault(od, dict(dir=od, title=t.get("he_title") or t.get("title"), sym=SYM.get(t.get("icon"), "•"), color=t.get("color", "#78909c"), tids=[]))
+            g = groups.setdefault(od, dict(dir=od, title=t.get("he_title") or t.get("title"), sym=SYM.get(t.get("icon"), "•"), color=t.get("color", "#78909c"), tids=[],
+                                           group=t.get("group", "Other"), group_he=t.get("he_group") or "אחר"))
             g["tids"].append(tid)
         names = {"blender": "עבודות Blender", "tripo_shape": "דגם 3D (TripoSG)", "step1x_shape": "דגם 3D (Step1X)", "blender_bake": "אפיית פרטים", "qwen_edit": "עריכת תמונה (Qwen)", "zimage": "תמונה מטקסט (Z-Image)", "music": "מוזיקה", "sound": "צלילים", "scripts": "סקריפטים", "other": "אחר", "godot_test": "בדיקות משחק"}
         self.models = []
-        for od, g in sorted(groups.items(), key=lambda kv: (self.types[kv[1]["tids"][0]].get("group", ""), kv[0])):
+        order = ["Images", "3D", "Audio", "Game", "Other"]
+        for od, g in sorted(groups.items(), key=lambda kv: (order.index(kv[1]["group"]) if kv[1]["group"] in order else 99, kv[0])):
             g["title"] = names.get(od, g["title"])
             self.models.append(g)
+            for tid in g["tids"]:
+                self.type_dir[tid] = od
         self.fill_models()
 
     def count_outputs(self, od):
@@ -1574,42 +1865,76 @@ class Main(W.QMainWindow):
 
     def fill_models(self):
         cur = self.sel_model
-        self.model_list.blockSignals(True)
-        self.model_list.clear()
-        it = W.QListWidgetItem("  עוזר Claude")
-        it.setData(Qt.UserRole, "__assistant__")
-        it.setIcon(sym_icon("✧", "#3574f0", 20))
-        self.model_list.addItem(it)
-        it = W.QListWidgetItem("  הכול")
-        it.setData(Qt.UserRole, None)
-        it.setIcon(sym_icon("▤", "#b4b8bf", 20))
-        self.model_list.addItem(it)
+        ml = self.model_list
+        ml.blockSignals(True)
+        ml.clear()
+
+        def add(text, data, kind="item", ic=None):
+            it = W.QListWidgetItem(text)
+            it.setData(Qt.UserRole, data)
+            it.setData(ROLE_KIND, kind)
+            if ic:
+                it.setIcon(ic)
+            if kind != "item":
+                it.setFlags(Qt.NoItemFlags)
+            ml.addItem(it)
+            return it
+        add("עוזר Claude", "__assistant__", ic=sym_icon("✧", "#3574f0", 18))
+        add("כל התוצאות", None, ic=sym_icon("▤", "#b4b8bf", 18))
+        last = None
         for g in self.models:
-            n = self.count_outputs(g["dir"])
-            it = W.QListWidgetItem("  %s%s" % (g["title"], ("   (%d)" % n) if n else ""))
-            it.setData(Qt.UserRole, g["dir"])
-            it.setIcon(sym_icon(g["sym"], g["color"], 20))
-            self.model_list.addItem(it)
+            if g["group"] != last:
+                add(g["group_he"], "__caption__", "caption")
+                last = g["group"]
+            add(g["title"], g["dir"], ic=sym_icon(g["sym"], g["color"], 18))
         sel = 1
         want = "__assistant__" if self.assistant_mode else cur
-        for i in range(self.model_list.count()):
-            if self.model_list.item(i).data(Qt.UserRole) == want:
+        for i in range(ml.count()):
+            if ml.item(i).data(ROLE_KIND) == "item" and ml.item(i).data(Qt.UserRole) == want:
                 sel = i
-        self.model_list.setCurrentRow(sel)
-        self.model_list.blockSignals(False)
+        ml.setCurrentRow(sel)
+        ml.blockSignals(False)
         self.on_model(sel)
+        self.update_counts()
+
+    def update_counts(self):
+        for i in range(self.model_list.count()):
+            it = self.model_list.item(i)
+            if it.data(ROLE_KIND) == "item" and it.data(Qt.UserRole) not in (None, "__assistant__"):
+                it.setData(ROLE_COUNT, self.count_outputs(it.data(Qt.UserRole)))
+        self.model_list.viewport().update()
+
+    def update_badges(self, s):
+        run, wait = {}, {}
+        for j in s["running"]:
+            od = self.type_dir.get(j["type"])
+            run[od] = run.get(od, 0) + 1
+        for j in s["queued"]:
+            od = self.type_dir.get(j["type"])
+            wait[od] = wait.get(od, 0) + 1
+        for i in range(self.model_list.count()):
+            it = self.model_list.item(i)
+            if it.data(ROLE_KIND) == "item":
+                od = it.data(Qt.UserRole)
+                it.setData(ROLE_RUN, run.get(od, 0))
+                it.setData(ROLE_WAIT, wait.get(od, 0))
+                if od not in (None, "__assistant__"):
+                    it.setToolTip("%s" % it.text() + chr(10) + "רצות: %d   ממתינות: %d   תוצאות שמורות: %d" % (run.get(od, 0), wait.get(od, 0), it.data(ROLE_COUNT) or 0))
+        self.model_list.viewport().update()
 
     def on_model(self, row):
         if row < 0:
             return
-        data = self.model_list.item(row).data(Qt.UserRole)
+        item = self.model_list.item(row)
+        if item.data(ROLE_KIND) != "item":
+            return
+        data = item.data(Qt.UserRole)
         self.assistant_mode = data == "__assistant__"
         self.sel_model = None if self.assistant_mode else data
+        if getattr(self, "persist", True) and getattr(self, "settings", None):
+            self.settings.setValue("last_model", data if data is not None else "")
         self.files_sig = None
         self.lower.setCurrentIndex(2 if self.assistant_mode else (1 if self.sel_model else 0))
-        sp = self.lower.parent()
-        if isinstance(sp, W.QSplitter):
-            sp.setSizes([640, 120] if self.assistant_mode else ([600, 150] if self.sel_model else [400, 300]))
         self.chat.set_attached(None)
         self.refresh_files()
         self.refresh_chat(force=True)
@@ -1713,12 +2038,7 @@ class Main(W.QMainWindow):
         self.files.setUpdatesEnabled(True)
         self.files_empty.setText("עוד אין תוצאות. כשעבודה תסתיים, הקבצים יופיעו כאן.")
         self.files_empty.setVisible(not files)
-        for i in range(2, self.model_list.count()):
-            od = self.model_list.item(i).data(Qt.UserRole)
-            gm = next((m for m in self.models if m["dir"] == od), None)
-            if gm:
-                n = self.count_outputs(od)
-                self.model_list.item(i).setText("  %s%s" % (gm["title"], ("   (%d)" % n) if n else ""))
+        self.update_counts()
 
     def files_menu(self, pos):
         it = self.files.itemAt(pos)
@@ -1731,6 +2051,8 @@ class Main(W.QMainWindow):
         m.addAction("פתח", lambda: os.startfile(fp))
         m.addAction("פתח את תיקיית העבודה", lambda: os.startfile(str(Path(fp).parent)))
         m.addAction("העתק נתיב", lambda: W.QApplication.clipboard().setText(fp))
+        if Path(fp).suffix.lower() in IMG:
+            m.addAction(icon("arrow", "#b4b8bf", 16), "שלח אל…", lambda: self.send_menu(fp, QtGui.QCursor.pos()))
         rj = Path(fp).parent / "result.json"
         if rj.exists():
             try:
@@ -1743,7 +2065,7 @@ class Main(W.QMainWindow):
     def hist_rerun(self):
         rows = sorted({i.row() for i in self.hist.selectedIndexes()})
         if not rows or rows[0] >= len(self.hist_jobs):
-            self.statusBar().showMessage("בחר קודם עבודה בהיסטוריה", 4000)
+            self.toast("בחר קודם עבודה בהיסטוריה", "warn")
             return
         for r in rows:
             self.rerun_job(self.hist_jobs[r]["id"])
@@ -1763,18 +2085,48 @@ class Main(W.QMainWindow):
 
     # ------------------------------------------------------------ state
     def on_down(self, msg):
-        self.set_head("#868a91", "השירות לא רץ", "הפעל מחדש עם AI_Broker.bat")
+        self.set_head("#868a91", "השירות לא רץ", "התור והעבודות לא זמינים עד שהשירות יעלה")
+        self.sd_dot.set("#868a91")
+        self.sd_lbl.setText("השירות כבוי")
+        if not getattr(self, "down_told", False):
+            self.down_told = True
+            self.toast("שירות ה-broker לא רץ", "bad", "הפעל", self.start_service, 9000)
+
+    def start_service(self):
+        try:
+            client.start_daemon()
+            self.down_told = False
+            self.toast("השירות עלה", "ok")
+        except Exception as e:
+            self.toast("לא הצלחתי להפעיל את השירות", "bad")
 
     def set_head(self, color, title, sub):
         self.dot.setStyleSheet("background:%s; border-radius:4px;" % color)
         self.h_title.setText(title)
         self.h_sub.setText(sub)
 
+    def show_job(self, jid):
+        for j in list(self.hist_jobs) + (self.state or {}).get("running", []) + (self.state or {}).get("queued", []):
+            if j["id"] == jid:
+                od = self.type_dir.get(j["type"])
+                if od:
+                    self.select_model(od)
+                return
+
+    def update_stats(self):
+        today = time.strftime("%Y-%m-%d")
+        js = [j for j in self.hist_jobs if j.get("finished") and time.strftime("%Y-%m-%d", time.localtime(j["finished"])) == today and j["state"] == "done"]
+        total = sum(max(0, (j["finished"] or 0) - (j.get("started") or j["finished"])) for j in js)
+        self.stat["done"].setText(str(len(js)))
+        self.stat["time"].setText(fmt_dur(total) if js else "-")
+        self.stat["ram"].setText("%.1f GB" % max([j.get("peak_ws") or 0 for j in js]) if js else "-")
+
     def type_info(self, tid):
         t = self.types.get(tid, {})
         return SYM.get(t.get("icon"), "•"), t.get("color", "#78909c"), t.get("he_title") or t.get("title") or tid
 
     def on_state(self, s):
+        self.down_told = False
         first = self.state is None
         self.state = s
         sy, lim = s["sys"], s["limits"]
@@ -1811,14 +2163,32 @@ class Main(W.QMainWindow):
         self.building = False
         self.fill_queue(s)
         self.refresh_chat()
-        self.sb.setText("RAM פנוי: %.0f GB      Commit פנוי: %.0f GB%s" % (sy["ram_avail"], sy["commit_avail"], ("      נעילת GPU: " + {"ours": "אצל ה-broker", "foreign": "אצל תוכנה אחרת"}.get(s["lock"], s["lock"])) if s["lock"] != "none" else ""))
+        self.update_badges(s)
+        dot_col, dot_txt = {"ACTIVE": ("#5fad65", "פעיל"), "PAUSED": ("#e0a030", "מושהה"), "PLAYING": ("#db5c5c", "משחק / הקלטה"), "BRAKE": ("#db5c5c", "בלם בטיחות")}[st]
+        self.sd_dot.set(dot_col)
+        self.sd_lbl.setText(dot_txt)
+        self.s_ram.set("RAM פנוי %.0f GB" % sy["ram_avail"])
+        self.s_commit.set("Commit פנוי %.0f GB" % sy["commit_avail"])
+        self.s_lock.setVisible(s["lock"] != "none")
+        if s["lock"] != "none":
+            self.s_lock.set("נעילת GPU: " + {"ours": "אצל ה-broker", "foreign": "אצל תוכנה אחרת"}.get(s["lock"], s["lock"]), "#e0a030" if s["lock"] == "foreign" else None)
+        run0 = next((j for j in s["running"] if j["state"] in ("running", "paused")), None)
+        self.task.set_job(run0, max(0, nrun - 1))
+        self.tabs.setTabText(0, "תור (%d)" % (nrun + nq) if (nrun + nq) else "תור")
         if self.tray and st != self.last_status:
             self.tray.setIcon(make_icon({"ACTIVE": "#5fad65", "PAUSED": "#e0a030", "PLAYING": "#db5c5c", "BRAKE": "#db5c5c"}[st]))
             self.last_status = st
         for n, ts, text in s.get("events", []):
             self.log_text += "%s  %s\n" % (time.strftime("%H:%M:%S", time.localtime(ts)), text)
-            if self.tray and not first and " -> " in text and text.startswith("#"):
-                self.tray.showMessage("AI Broker", text[:150], W.QSystemTrayIcon.Information, 6000)
+            mt = re.match(r"^#(\d+) (.+?) -> (done|failed|cancelled)", text)
+            if mt and not first:
+                jid, name, how = int(mt.group(1)), mt.group(2), mt.group(3)
+                if how == "done":
+                    self.toast("הסתיימה: " + name, "ok", "הצג", lambda j=jid: self.show_job(j))
+                elif how == "failed":
+                    self.toast("נכשלה: " + name, "bad", "הצג", lambda j=jid: self.show_job(j))
+                if self.tray and how != "cancelled":
+                    self.tray.showMessage("AI Broker", text[:150], W.QSystemTrayIcon.Information, 6000)
         self.log_text = self.log_text[-60000:]
         if s["hist_rev"] != self.hist_rev:
             self.hist_rev = s["hist_rev"]
@@ -1854,6 +2224,7 @@ class Main(W.QMainWindow):
                     it.setIcon(sym_icon(sym, color, 16))
                 elif c == 4:
                     it.setForeground(QtGui.QColor(STATE_COLOR.get(st, "#b4b8bf")))
+                    it.setIcon(dot_icon(STATE_COLOR.get(st, "#b4b8bf"), 10))
                 elif c == 7:
                     it.setForeground(QtGui.QColor("#e0a030" if j["state"] == "queued" and j.get("reason") else "#b4b8bf"))
                 flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
@@ -1865,8 +2236,7 @@ class Main(W.QMainWindow):
                 q.selectRow(r)
         q.verticalScrollBar().setValue(vs)
         q.setUpdatesEnabled(True)
-        self.q_empty.setVisible(not jobs)
-        q.setVisible(bool(jobs))
+        self.q_stack.setCurrentIndex(1 if jobs else 0)
 
     def fill_history(self):
         r = self.api({"op": "history", "limit": 60})
@@ -1886,7 +2256,9 @@ class Main(W.QMainWindow):
                     it.setIcon(sym_icon(sym, color, 16))
                 if c == 4:
                     it.setForeground(QtGui.QColor(STATE_COLOR.get(j["state"], "#b4b8bf")))
+                    it.setIcon(dot_icon(STATE_COLOR.get(j["state"], "#b4b8bf"), 10))
                 h.setItem(i, c, it)
+        self.update_stats()
 
     # ------------------------------------------------------------ window
     def show_normal(self):
@@ -1898,7 +2270,17 @@ class Main(W.QMainWindow):
         self.quitting = True
         self.close()
 
+    def save_layout(self):
+        if not getattr(self, "persist", True):
+            return
+        st = self.settings
+        st.setValue("geometry", self.saveGeometry())
+        st.setValue("split_main", self.split_main.saveState())
+        st.setValue("split_center", self.split_center.saveState())
+        st.setValue("zoom", self.zoom)
+
     def closeEvent(self, e):
+        self.save_layout()
         if self.tray and not self.quitting:
             e.ignore()
             self.hide()
@@ -1932,6 +2314,7 @@ def main(argv=None):
     except Exception as e:
         print("could not start the broker:", e)
     win = Main(tray=("--no-tray" not in argv and shot is None), model=model)
+    win.persist = shot is None
     if size:
         win.resize(*[int(x) for x in size.lower().split("x")])
     win.tabs.setCurrentIndex(tab)

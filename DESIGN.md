@@ -27,6 +27,9 @@ Every job gets `output/<model type>/<date>_<name>/` (ASCII slug), created by the
 ## Built-in assistant (Claude inside the window)
 First entry of the model list: a normal chat with Claude. Each message runs Claude Code **headless and hidden** (`claude -p --output-format stream-json --resume`, no terminal anywhere) with the broker's MCP tools and `skill/ai-broker/AGENT_PROMPT.md` (session-only flags, no settings edited). It can read the queue, resources, history and outputs, run jobs, search the web and keep `docs/MODELS.md` / `DOWNLOADS.md`. Anything else (pause the queue, run a shell command such as a download) is denied by Claude Code, comes back as `permission_denials`, and the window asks Approve / Decline in the chat; an approved action is allowed for the next turn only (the exact command). Model: Haiku by default, Sonnet or the account default selectable. Uses the owner's Claude plan quota.
 
+## Look and feel
+IDE-style dark theme (`aibroker/theme.py`: neutral greys, one blue accent, 4-6 px radii, own thin line icons drawn from an SVG set, 10.5 pt text with Ctrl +/- zoom) and a small design kit (`aibroker/kit.py`: tool-window headers, gauges with a two-minute history graph, status chips, toasts, the model-list painter with running/waiting/result pills, the status-bar background-task indicator, a wrapping layout and the Ctrl+K command palette). Logo: a rounded hexagon holding a geometric B with an orange middle bar (`assets/`). UX: messages with who/when headers, failure reasons shown in the answer, "send to another model", paste/drop/recall, persisted layout, service-down recovery button.
+
 ## Control
 Owner: drag rows / right-click run next, up, down, pause, cancel; Pause all (queue only, or also suspend running); big **I am playing / recording** toggle (no GPU starts, running GPU jobs suspended, resumes on off). `PAUSE_AI.bat` / `RESUME_AI.bat` / `PLAYING_ON.bat` / `PLAYING_OFF.bat`.
 

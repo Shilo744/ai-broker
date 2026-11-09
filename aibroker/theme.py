@@ -61,10 +61,50 @@ QProgressBar { border: none; border-radius: 1px; background: #393b40; max-height
 QScrollBar:vertical { background: transparent; width: 9px; } QScrollBar::handle:vertical { background: #4e5157; border-radius: 3px; min-height: 30px; margin: 1px; }
 QScrollBar:horizontal { background: transparent; height: 9px; } QScrollBar::handle:horizontal { background: #4e5157; border-radius: 3px; min-width: 30px; margin: 1px; }
 QScrollBar::add-line, QScrollBar::sub-line { height: 0; width: 0; }
-QSplitter::handle { background: transparent; }
+QSplitter::handle { background: transparent; } QSplitter::handle:horizontal { width: 6px; } QSplitter::handle:vertical { height: 6px; }
+QSplitter::handle:hover { background: #393b40; }
 QMenu { background: #2b2d30; border: 1px solid #43454a; padding: 3px; } QMenu::item { padding: 5px 20px; border-radius: 3px; } QMenu::item:selected { background: #2e436e; }
 QToolTip { background: #393b40; color: #dfe1e5; border: 1px solid #4e5157; padding: 4px; }
+QFrame#toolheader { background: transparent; border: none; border-bottom: 1px solid #393b40; }
+QToolButton { background: transparent; border: none; border-radius: 4px; padding: 4px; } QToolButton:hover { background: #393b40; }
+QToolButton:pressed { background: #43454a; } QToolButton:checked { background: #2e436e; }
+QFrame#toast { background: #393b40; border: 1px solid #4e5157; border-radius: 6px; }
+QFrame#statcard { background: #1e1f22; border: 1px solid #393b40; border-radius: 6px; }
+QFrame#palette { background: #2b2d30; border: 1px solid #4e5157; border-radius: 8px; }
+QFrame#palette QLineEdit { border: none; border-bottom: 1px solid #393b40; border-radius: 0; background: transparent; padding: 10px 12px; font-size: 11.5pt; }
+QFrame#palette QListWidget { background: transparent; border: none; outline: none; padding: 4px; }
+QFrame#palette QListWidget::item { padding: 7px 10px; border-radius: 4px; }
+QFrame#palette QListWidget::item:selected { background: #2e436e; color: white; }
+QPushButton#pill { background: transparent; border: 1px solid #4e5157; border-radius: 11px; padding: 3px 12px; font-size: 9.5pt; color: #b4b8bf; }
+QPushButton#pill:hover { border-color: #3574f0; color: #ffffff; background: #233350; }
+QPushButton#flat { background: transparent; border: 1px solid transparent; color: #868a91; padding: 2px 8px; font-size: 9.5pt; }
+QPushButton#flat:hover { color: #dfe1e5; background: #393b40; }
 """
+
+def qss(scale=1.0):
+    """The stylesheet with every font size multiplied by `scale` (Ctrl +/- zoom)."""
+    import re
+    if abs(scale - 1.0) < 0.01:
+        return QSS
+    return re.sub(r"(\d+(?:\.\d+)?)pt", lambda m: "%.1fpt" % (float(m.group(1)) * scale), QSS)
+
+
+def style_titlebar(hwnd):
+    """Dark title bar in the app colours (Windows 11; silently ignored elsewhere)."""
+    try:
+        import ctypes
+        dwm = ctypes.windll.dwmapi
+
+        def put(attr, val):
+            v = ctypes.c_int(val)
+            dwm.DwmSetWindowAttribute(ctypes.c_void_p(int(hwnd)), attr, ctypes.byref(v), 4)
+        put(20, 1)               # immersive dark mode
+        put(35, 0x00221F1E)      # caption colour  #1e1f22  (COLORREF is BGR)
+        put(36, 0x00E5E1DF)      # caption text    #dfe1e5
+        put(34, 0x00403B39)      # border          #393b40
+    except Exception:
+        pass
+
 
 # ------------------------------------------------------------------ line icons (24x24, stroke only unless noted)
 _SVG = {
@@ -94,6 +134,21 @@ _SVG = {
     "send": '<path d="M4 12l16-8-6 16-3-7z"/>',
     "clip": '<path d="M20 11l-8 8a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8"/>',
     "doc": '<path d="M6 3h8l5 5v13H6z"/><path d="M14 3v5h5"/>',
+    "check": '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+    "user": '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>',
+    "info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+    "alert": '<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
+    "list": '<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
+    "search": '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+    "cpu": '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
+    "chart": '<path d="M4 20V10M10 20V4M16 20v-8M22 20H2"/>',
+    "arrow": '<path d="M5 12h14M13 6l6 6-6 6"/>',
+    "copy": '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>',
+    "trash": '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    "help": '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.4-1 .9-1 1.7M12 17h.01"/>',
+    "clock": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    "hdd": '<rect x="3" y="14" width="18" height="6" rx="2"/><path d="M3 14l3-9h12l3 9M7 17h.01M11 17h.01"/>',
+    "zoomin": '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4M11 8v6M8 11h6"/>',
 }
 _FILLED = {"pause", "play"}
 SYMBOL_ICON = {"✎": "image", "✦": "wand", "⬢": "cube", "◈": "layers", "⚒": "wrench", "▦": "layers", "♪": "music", "♬": "speaker", "▷": "gamepad", "◎": "camera",
@@ -130,6 +185,19 @@ def sym_icon(symbol, color=SUB, size=18):
     return icon(SYMBOL_ICON.get(symbol, "doc"), color, size)
 
 
+def dot_icon(color, size=10):
+    pm = QtGui.QPixmap(size * 2, size * 2)
+    pm.fill(Qt.transparent)
+    p = QtGui.QPainter(pm)
+    p.setRenderHint(QtGui.QPainter.Antialiasing)
+    p.setBrush(QtGui.QColor(color))
+    p.setPen(Qt.NoPen)
+    p.drawEllipse(QtCore.QRectF(size * 0.5, size * 0.5, size, size))
+    p.end()
+    pm.setDevicePixelRatio(2.0)
+    return QtGui.QIcon(pm)
+
+
 def symbol_pixmap(symbol, color, size=96):
     """A tinted rounded square with the line icon of that type (model list, result tiles)."""
     dpr = 2.0
@@ -152,38 +220,72 @@ def symbol_pixmap(symbol, color, size=96):
 
 
 # ------------------------------------------------------------------ logo
-def logo_pixmap(size=64, status=None):
-    """Product mark: gradient tile with a black square carrying 'AB' and a small bar (queue), in the layout language of IDE product icons."""
-    dpr = 2.0
-    s = size * dpr
-    pm = QtGui.QPixmap(int(s), int(s))
+# A rounded hexagon (the compute core) holding a geometric "B" whose middle bar is orange: the broker that sits between the requests and the machine.
+LOGO_TOP = "#22d8c0"
+LOGO_BOTTOM = "#0e5a78"
+LOGO_BAR = "#ffb340"
+
+
+def _hexagon(cx, cy, r):
+    import math
+    return QtGui.QPolygonF([QtCore.QPointF(cx + r * math.cos(math.radians(-90 + 60 * k)), cy + r * math.sin(math.radians(-90 + 60 * k))) for k in range(6)])
+
+
+def paint_logo(p, status=None, detail=True):
+    """Draws the logo into a 100x100 coordinate space."""
+    g = QtGui.QLinearGradient(14, 8, 86, 94)
+    g.setColorAt(0.0, QtGui.QColor(LOGO_TOP))
+    g.setColorAt(1.0, QtGui.QColor(LOGO_BOTTOM))
+    p.setBrush(g)
+    p.setPen(QtGui.QPen(QtGui.QBrush(g), 9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    p.drawPolygon(_hexagon(50, 50, 42.5))
+    if detail:                                           # soft light from the top and a fine inner edge (only where there are enough pixels)
+        hl = QtGui.QLinearGradient(0, 4, 0, 60)
+        hl.setColorAt(0.0, QtGui.QColor(255, 255, 255, 52))
+        hl.setColorAt(1.0, QtGui.QColor(255, 255, 255, 0))
+        p.setPen(Qt.NoPen)
+        p.setBrush(hl)
+        p.drawPolygon(_hexagon(50, 50, 44))
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 46), 1.4))
+        p.drawPolygon(_hexagon(50, 50, 35))
+    white = QtGui.QPen(QtGui.QColor("#ffffff"), 9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    p.setBrush(Qt.NoBrush)
+    p.setPen(white)
+    stem = QtGui.QPainterPath()
+    stem.moveTo(39, 30)
+    stem.lineTo(39, 71)
+    p.drawPath(stem)
+    up = QtGui.QPainterPath()
+    up.moveTo(39, 30)
+    up.lineTo(52, 30)
+    up.arcTo(QtCore.QRectF(41.5, 30, 21, 21), 90, -180)
+    up.lineTo(39, 51)
+    p.drawPath(up)
+    lo = QtGui.QPainterPath()
+    lo.moveTo(39, 51)
+    lo.lineTo(54, 51)
+    lo.arcTo(QtCore.QRectF(44, 51, 20, 20), 90, -180)
+    lo.lineTo(39, 71)
+    p.drawPath(lo)
+    p.setPen(QtGui.QPen(QtGui.QColor(LOGO_BAR), 9, Qt.SolidLine, Qt.RoundCap))
+    p.drawLine(QtCore.QPointF(39, 51), QtCore.QPointF(53, 51))
+    if status:                                           # tray: a status dot in the corner
+        p.setPen(Qt.NoPen)
+        p.setBrush(QtGui.QColor("#1e1f22"))
+        p.drawEllipse(QtCore.QPointF(80, 80), 19, 19)
+        p.setBrush(QtGui.QColor(status))
+        p.drawEllipse(QtCore.QPointF(80, 80), 13, 13)
+
+
+def logo_pixmap(size=64, status=None, dpr=2.0):
+    px = max(8, int(size * dpr))
+    pm = QtGui.QPixmap(px, px)
     pm.fill(Qt.transparent)
     p = QtGui.QPainter(pm)
     p.setRenderHint(QtGui.QPainter.Antialiasing)
-    g = QtGui.QLinearGradient(0, 0, s, s)
-    g.setColorAt(0.0, QtGui.QColor("#20c5ff"))
-    g.setColorAt(0.5, QtGui.QColor("#3574f0"))
-    g.setColorAt(1.0, QtGui.QColor("#8a4cf0"))
-    p.setBrush(g)
-    p.setPen(Qt.NoPen)
-    p.drawRoundedRect(QtCore.QRectF(0, 0, s, s), s * 0.22, s * 0.22)
-    p.setBrush(QtGui.QColor("#000000"))
-    p.drawRect(QtCore.QRectF(s * 0.13, s * 0.30, s * 0.57, s * 0.57))
-    p.setPen(QtGui.QColor("#ffffff"))
-    f = QtGui.QFont("Segoe UI", 1)
-    f.setBold(True)
-    f.setPixelSize(max(6, int(s * 0.27)))
-    p.setFont(f)
-    p.drawText(QtCore.QRectF(s * 0.13, s * 0.33, s * 0.57, s * 0.34), Qt.AlignCenter, "AB")
-    p.setPen(Qt.NoPen)
-    p.setBrush(QtGui.QColor("#ffffff"))
-    p.drawRect(QtCore.QRectF(s * 0.20, s * 0.76, s * 0.22, s * 0.045))
-    if status:
-        r = s * 0.17
-        p.setBrush(QtGui.QColor("#1e1f22"))
-        p.drawEllipse(QtCore.QPointF(s - r * 1.05, s - r * 1.05), r * 1.25, r * 1.25)
-        p.setBrush(QtGui.QColor(status))
-        p.drawEllipse(QtCore.QPointF(s - r * 1.05, s - r * 1.05), r * 0.85, r * 0.85)
+    p.scale(px / 100.0, px / 100.0)
+    paint_logo(p, status, detail=px >= 40)
     p.end()
     pm.setDevicePixelRatio(dpr)
     return pm
@@ -197,6 +299,23 @@ def make_icon(status=None):
 
 
 def save_ico(path):
-    pm = logo_pixmap(256)
-    pm.setDevicePixelRatio(1.0)
-    return pm.scaled(256, 256, Qt.KeepAspectRatio, Qt.SmoothTransformation).save(str(path), "ICO")
+    """Multi-size Windows icon (PNG-compressed entries, 16..256) so the desktop, taskbar and Start menu all get a sharp logo."""
+    import struct
+    sizes = (16, 20, 24, 32, 40, 48, 64, 96, 128, 256)
+    blobs = []
+    for sz in sizes:
+        pm = logo_pixmap(sz, None, 1.0)
+        ba = QtCore.QByteArray()
+        buf = QtCore.QBuffer(ba)
+        buf.open(QtCore.QIODevice.WriteOnly)
+        pm.save(buf, "PNG")
+        blobs.append(bytes(ba))
+    head = struct.pack("<HHH", 0, 1, len(sizes))
+    offset = 6 + 16 * len(sizes)
+    entries = b""
+    for sz, b in zip(sizes, blobs):
+        entries += struct.pack("<BBBBHHII", 0 if sz >= 256 else sz, 0 if sz >= 256 else sz, 0, 0, 1, 32, len(b), offset)
+        offset += len(b)
+    with open(str(path), "wb") as f:
+        f.write(head + entries + b"".join(blobs))
+    return True
