@@ -1,0 +1,26 @@
+{
+ "job_id": 43,
+ "name": "preview raw_s7.glb",
+ "type": "glb_preview",
+ "requester": "broker",
+ "state": "done",
+ "exit_code": 0,
+ "seconds": 4.3,
+ "peak_ram_gb": 0.67,
+ "peak_commit_gb": 1.13,
+ "peak_vram_gb": 0.11,
+ "command": [
+  "C:/Programs/Blender/blender.exe",
+  "-b",
+  "--threads",
+  "4",
+  "--python",
+  "C:/Migrated/Projects/Personal/Tools/ai-broker/runners/blender_preview.py",
+  "--",
+  "C:/Migrated/Projects/Personal/Tools/ai-broker/output/tripo_shape/2026-11-09_193526_fur_collar/raw_s7.glb",
+  "C:/Migrated/Projects/Personal/Tools/ai-broker/output/tripo_shape/2026-11-09_193526_fur_collar/preview",
+  "36",
+  "512"
+ ],
+ "finished": "2026-11-09 20:46:32"
+}

@@ -296,6 +296,8 @@ class SubmitDialog(W.QDialog):
         self.lay.addWidget(note)
         self.combo = W.QComboBox()
         for tid, t in sorted(types.items(), key=lambda kv: (kv[1].get("group", ""), kv[0])):
+            if t.get("hidden"):
+                continue
             self.combo.addItem(t.get("he_title") or t.get("title", tid), tid)
         if preselect:
             i = self.combo.findData(preselect)
@@ -455,9 +457,10 @@ class AdvancedDialog(W.QDialog):
 
 class Thumb(W.QLabel):
     """A clickable picture or file tile inside a chat bubble."""
-    def __init__(self, pixmap, path, size=150):
+    def __init__(self, pixmap, path, size=150, on_click=None):
         super().__init__()
         self.path = path
+        self.on_click = on_click
         self.setPixmap(pixmap)
         self.setFixedSize(pixmap.size())
         self.setCursor(Qt.PointingHandCursor)
@@ -466,7 +469,74 @@ class Thumb(W.QLabel):
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.LeftButton and os.path.exists(self.path):
-            os.startfile(self.path)
+            if self.on_click:
+                self.on_click()
+            else:
+                os.startfile(self.path)
+
+
+
+def glb_frames(path):
+    d = Path(path).parent / "preview"
+    return sorted(str(x) for x in d.glob("frame_*.png")) if d.is_dir() else []
+
+
+class TurntableDialog(W.QDialog):
+    """Spin a 3D model with the mouse. The frames come from the broker's Blender preview job (36 views around the model)."""
+    def __init__(self, parent, glb):
+        super().__init__(parent)
+        self.glb = glb
+        self.setWindowTitle(Path(glb).name)
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.frames = [QtGui.QPixmap(f) for f in glb_frames(glb)]
+        self.i = 0
+        self.drag = None
+        v = W.QVBoxLayout(self)
+        self.view = W.QLabel()
+        self.view.setAlignment(Qt.AlignCenter)
+        self.view.setMinimumSize(520, 520)
+        self.view.setStyleSheet("background:#0b0d11; border-radius:10px;")
+        self.view.setCursor(Qt.OpenHandCursor)
+        v.addWidget(self.view)
+        hint = W.QLabel("גרור עם העכבר כדי לסובב. הדגם מוצג בלי צבע (חומר אפור) כדי לראות את הצורה.")
+        hint.setObjectName("muted")
+        v.addWidget(hint)
+        row = W.QHBoxLayout()
+        b = W.QPushButton("פתח את הקובץ")
+        b.clicked.connect(lambda: os.startfile(self.glb))
+        c = W.QPushButton("פתח תיקייה")
+        c.clicked.connect(lambda: os.startfile(str(Path(self.glb).parent)))
+        row.addWidget(b)
+        row.addWidget(c)
+        row.addStretch(1)
+        v.addLayout(row)
+        self.timer = QtCore.QTimer(self)
+        self.timer.timeout.connect(lambda: self.show_frame(self.i + 1))
+        self.timer.start(90)
+        self.show_frame(0)
+
+    def show_frame(self, i):
+        if self.frames:
+            self.i = i % len(self.frames)
+            self.view.setPixmap(self.frames[self.i].scaled(self.view.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    def mousePressEvent(self, e):
+        if self.view.geometry().contains(e.position().toPoint()):
+            self.drag = (e.position().x(), self.i)
+            self.timer.stop()
+            self.view.setCursor(Qt.ClosedHandCursor)
+
+    def mouseMoveEvent(self, e):
+        if self.drag:
+            self.show_frame(self.drag[1] - int((e.position().x() - self.drag[0]) / 9))
+
+    def mouseReleaseEvent(self, e):
+        self.drag = None
+        self.view.setCursor(Qt.OpenHandCursor)
+
+    def resizeEvent(self, e):
+        self.show_frame(self.i)
+        super().resizeEvent(e)
 
 
 def aligned(bubble, who):
@@ -698,7 +768,7 @@ class ChatPanel(W.QFrame):
         self.title.setText(("שיחה עם: " + g["title"]) if g else "")
         self.path.setText(str(m.model_folder()))
         jobs = m.model_jobs()
-        sig = (m.sel_model, tuple((j["id"], j["state"], bool(j.get("held")), int(j.get("elapsed", 0)) // 5, len(self.outfiles(j))) for j in jobs), bool(cfg))
+        sig = (m.sel_model, tuple((j["id"], j["state"], bool(j.get("held")), int(j.get("elapsed", 0)) // 5, len(self.outfiles(j)), sum(1 for f in self.outfiles(j) if f.lower().endswith(".glb") and (Path(f).parent / "preview" / "preview.png").exists())) for j in jobs), bool(cfg))
         if sig == self.sig and not force:
             return
         self.sig = sig
@@ -746,6 +816,8 @@ class ChatPanel(W.QFrame):
         out = []
         if d and os.path.isdir(d):
             for root, _x, names in os.walk(d):
+                if os.path.basename(root) == "preview":
+                    continue
                 for n in sorted(names):
                     if n not in HIDDEN_FILES:
                         out.append(os.path.join(root, n))
@@ -787,6 +859,9 @@ class ChatPanel(W.QFrame):
                     if not pm.isNull():
                         tiles.append(Thumb(pm.scaled(210, 210, Qt.KeepAspectRatio, Qt.SmoothTransformation), f))
                         continue
+                if f.lower().endswith(".glb"):
+                    tiles.append(self.main.glb_tile(f))
+                    continue
                 sym, col = KIND.get(Path(f).suffix.lower(), ("▫", "#8b93a5"))
                 t = Thumb(symbol_pixmap(sym, col, 84), f)
                 t.setToolTip(f)
@@ -1050,6 +1125,7 @@ class Main(W.QMainWindow):
         self.thumb_cache = {}
         self.hist_jobs = []
         self.assistant_mode = False
+        self.preview_asked = set()
         self.setAcceptDrops(True)
         self._build()
         self.tray = None
@@ -1235,7 +1311,7 @@ class Main(W.QMainWindow):
         self.files.setMovement(W.QListView.Static)
         self.files.setWordWrap(True)
         self.files.setUniformItemSizes(True)
-        self.files.itemDoubleClicked.connect(lambda it: os.startfile(it.data(Qt.UserRole)) if it.data(Qt.UserRole) != "__new__" else None)
+        self.files.itemDoubleClicked.connect(lambda it: self.open_file(it.data(Qt.UserRole)))
         self.files.itemClicked.connect(lambda it: self.open_submit(self.model_first_type()) if it.data(Qt.UserRole) == "__new__" else None)
         self.files.setContextMenuPolicy(Qt.CustomContextMenu)
         self.files.customContextMenuRequested.connect(self.files_menu)
@@ -1344,6 +1420,35 @@ class Main(W.QMainWindow):
             m.addAction(text, lambda k=key: self.queue_action(k))
         m.exec(self.queue.viewport().mapToGlobal(pos))
 
+    def open_file(self, path):
+        """Open a result: a 3D model opens the in-app turntable (never an external program); everything else opens normally."""
+        if not path or path == "__new__":
+            return
+        if path.lower().endswith(".glb") and glb_frames(path):
+            TurntableDialog(self, path).exec()
+        else:
+            os.startfile(path)
+
+    def request_preview(self, glb):
+        if glb in self.preview_asked:
+            return
+        self.preview_asked.add(glb)
+        self.api({"op": "preview", "path": glb})
+
+    def glb_tile(self, glb):
+        """A 3D model in a chat bubble: its preview picture (click = spin it), or a placeholder while the preview is being made."""
+        pv = Path(glb).parent / "preview" / "preview.png"
+        if pv.exists():
+            pm = QtGui.QPixmap(str(pv))
+            if not pm.isNull():
+                t = Thumb(pm.scaled(210, 210, Qt.KeepAspectRatio, Qt.SmoothTransformation), glb, on_click=lambda: self.open_file(glb))
+                t.setToolTip("לחץ כדי לסובב את הדגם\n" + glb)
+                return t
+        self.request_preview(glb)
+        t = Thumb(symbol_pixmap("⬢", "#2aa198", 120), glb)
+        t.setToolTip("יוצר תצוגה מקדימה… (כמה שניות)\n" + glb)
+        return t
+
     def model_first_type(self, od=None):
         od = od if od is not None else self.sel_model
         g = next((m for m in self.models if m["dir"] == od), None)
@@ -1414,6 +1519,8 @@ class Main(W.QMainWindow):
         self.output_root = r.get("output_root", self.output_root)
         groups = {}
         for tid, t in self.types.items():
+            if t.get("hidden"):
+                continue
             od = t.get("output_dir") or tid
             g = groups.setdefault(od, dict(dir=od, title=t.get("he_title") or t.get("title"), sym=SYM.get(t.get("icon"), "•"), color=t.get("color", "#78909c"), tids=[]))
             g["tids"].append(tid)
@@ -1503,6 +1610,8 @@ class Main(W.QMainWindow):
         base = self.model_folder()
         if base.is_dir():
             for root, _dirs, names in os.walk(base):
+                if os.path.basename(root) == "preview":
+                    continue
                 for n in names:
                     if n in HIDDEN_FILES:
                         continue
@@ -1521,7 +1630,16 @@ class Main(W.QMainWindow):
             return self.thumb_cache[key]
         ext = fp.suffix.lower()
         icon = None
-        if ext in IMG and fp.stat().st_size < 25e6:
+        if ext == ".glb":
+            pv = fp.parent / "preview" / "preview.png"
+            if pv.exists():
+                img = QtGui.QImage(str(pv))
+                if not img.isNull():
+                    icon = QtGui.QIcon(QtGui.QPixmap.fromImage(img.scaled(110, 110, Qt.KeepAspectRatio, Qt.SmoothTransformation)))
+                    self.thumb_cache[key] = icon
+                    return icon
+            self.request_preview(str(fp))
+        if icon is None and ext in IMG and fp.stat().st_size < 25e6:
             img = QtGui.QImage(str(fp))
             if not img.isNull():
                 icon = QtGui.QIcon(QtGui.QPixmap.fromImage(img.scaled(110, 110, Qt.KeepAspectRatio, Qt.SmoothTransformation)))

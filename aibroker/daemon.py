@@ -126,6 +126,8 @@ class Broker:
 
     def make_outdir(self, t, name):
         """Every model type has its OWN folder: <output_root>/<type output_dir>/<date>_<time>_<job name>/ (created here, always)."""
+        if t.get("no_outdir"):
+            return ""
         root = Path(self.cfg["output_root"]) / (t.get("output_dir") or t["id"])
         slug = re.sub(r"[^A-Za-z0-9\-]+", "_", str(name)).strip("_")[:40] or "job"      # ASCII only: some tools (cv2 and friends) cannot open non-ASCII paths on Windows
         base = root / ("%s_%s" % (time.strftime("%Y-%m-%d_%H%M%S"), slug))
@@ -135,6 +137,31 @@ class Broker:
             d = Path("%s-%d" % (base, n))
         d.mkdir(parents=True, exist_ok=True)
         return str(d)
+
+    def ensure_preview(self, glb):
+        """Queue a turntable preview of a .glb unless one exists or is already queued. Returns the job id or None."""
+        glb = str(glb).replace("\\", "/")
+        out = os.path.join(os.path.dirname(glb), "preview").replace("\\", "/")
+        if os.path.exists(os.path.join(out, "preview.png")) or not os.path.exists(glb):
+            return None
+        for j in self.store.by_state("queued", "running", "paused"):
+            if j["type"] == "glb_preview" and (j["params"] or {}).get("glb") == glb:
+                return None
+        return self.submit(dict(type="glb_preview", params={"glb": glb, "out": out}, name="preview " + os.path.basename(glb), requester="broker"))
+
+    def auto_preview(self, j, state):
+        if state != "done" or not self.cfg.get("auto_preview", True) or j["type"] == "glb_preview" or not j.get("outdir"):
+            return
+        try:
+            n = 0
+            for root, dirs, names in os.walk(j["outdir"]):
+                dirs[:] = [d for d in dirs if d != "preview"]
+                for nm in names:
+                    if nm.lower().endswith(".glb") and n < 3:
+                        n += 1
+                        self.ensure_preview(os.path.join(root, nm))
+        except Exception as e:
+            self.log("auto preview failed: %r" % (e,))
 
     # ------------------------------------------------------------ queue ops
     def move(self, ids, to):
@@ -305,6 +332,7 @@ class Broker:
                 pass
             lv.jobobj.close()
             self.write_result(j, state, rc, secs, lv.peak_ws, peak_c, lv.peak_vram)
+            self.auto_preview(j, state)
             del self.live[jid]
             self.finished_models[j["model"]] = time.time()
             self.hist_rev += 1
@@ -507,6 +535,9 @@ class Broker:
         if op == "move":
             self.move([int(i) for i in req["ids"]], req["to"])
             return dict(ok=True)
+        if op == "preview":
+            with self.lock:
+                return dict(ok=True, id=self.ensure_preview(req["path"]))
         if op == "rerun":
             return dict(ok=True, id=self.rerun(int(req["id"]), req.get("requester")))
         if op == "cancel":

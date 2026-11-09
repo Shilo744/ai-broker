@@ -1,0 +1,45 @@
+{
+ "id": "glb_preview",
+ "title": "3D preview (turntable)",
+ "group": "Other",
+ "klass": "cpu",
+ "model": "blender",
+ "est": {
+  "ram_gb": 4,
+  "vram_gb": 0,
+  "commit_gb": 5
+ },
+ "max_parallel": 2,
+ "hidden": true,
+ "no_outdir": true,
+ "output_dir": "previews",
+ "notes": "Made automatically after a 3D job: Blender Workbench renders 36 frames so the window can show and spin the model.",
+ "params": {
+  "glb": {
+   "required": true
+  },
+  "out": {
+   "required": true
+  },
+  "frames": 36,
+  "size": 512
+ },
+ "cmd": [
+  "{blender}",
+  "-b",
+  "--threads",
+  "4",
+  "--python",
+  "{runners}/blender_preview.py",
+  "--",
+  "{glb}",
+  "{out}",
+  "{frames}",
+  "{size}"
+ ],
+ "he_title": "תצוגה מקדימה תלת-ממדית",
+ "he_desc": "נוצרת אוטומטית אחרי עבודת תלת-ממד",
+ "he_group": "אחר",
+ "icon": "🧊",
+ "color": "#2aa198"
+}

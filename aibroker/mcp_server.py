@@ -110,6 +110,7 @@ def job_status(job_id: Annotated[int, Field(description="Job id returned by subm
     if d and os.path.isdir(d) and r["job"]["state"] in ("done", "failed"):
         files = []
         for root, _dirs, names in os.walk(d):
+            _dirs[:] = [x for x in _dirs if x != "preview"]
             for n in names:
                 if n not in ("job.log", "result.json"):
                     fp = os.path.join(root, n)
