@@ -23,7 +23,7 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 base = "http://127.0.0.1:%d" % srv.server_address[1]
 os.makedirs(os.path.join(sandbox.DIR, "catalog"))
 json.dump({"packs": [{"id": "demo_pack", "category": "audio", "title": "חבילת הדגמה (קובץ קטן מהשרת המקומי)", "title_en": "Demo pack (a small file from the local server)", "what": "הדגמה של הורדה עם התקדמות.", "what_en": "A demo of a download with progress.",
-    "jobtypes": [], "runtime": [], "needs": {"vram_min_gb": 2, "vram_ok_gb": 4, "ram_gb": 4}, "license": {"name": "demo"}, "files": [
+    "jobtypes": [], "runtime": [], "needs": {"ram_gb": 1}, "license": {"name": "demo"}, "files": [
     {"root": "models", "dest": "demo/demo.bin", "url": base + "/demo.bin", "size": len(GOOD), "sha256": hashlib.sha256(GOOD).hexdigest()}]}]}, open(os.path.join(sandbox.DIR, "catalog", "demo.json"), "w", encoding="utf-8"))
 daemon = subprocess.Popen([sys.executable, "-m", "aibroker.daemon"], cwd=".", env=dict(os.environ), creationflags=osutil.NO_WINDOW, **osutil.SESSION)
 t0 = time.time()
@@ -68,3 +68,4 @@ def step4():
     daemon.terminate(); app.quit()
 QtCore.QTimer.singleShot(2500, step1)
 app.exec()
+sys.exit(0 if res and all(res) else 1)

@@ -1,5 +1,7 @@
 # AI Broker
 
+[![tests](https://github.com/Shilo744/ai-broker/actions/workflows/tests.yml/badge.svg)](https://github.com/Shilo744/ai-broker/actions/workflows/tests.yml)
+
 **One queue for the heavy local AI jobs of your computer (Windows; macOS and Linux experimental).** Image and 3D models, Blender, music and sound models, game test runs: you and your Claude Code agents submit jobs to one place, and the broker runs as many of them at once as your RAM and GPU memory allow, learns what each job really costs, and steps aside when you play or record.
 
 [עברית: README.he.md](README.he.md)
