@@ -22,6 +22,7 @@ QSS = """
 * { font-family: 'Segoe UI'; font-size: 10.5pt; color: #dfe1e5; }
 QMainWindow, QDialog, QWidget#page { background: #1e1f22; }
 QFrame#topbar { background: #1e1f22; border-bottom: 1px solid #393b40; }
+QFrame#resbar { background: #25272a; border-bottom: 1px solid #393b40; }
 QFrame#panel { background: #2b2d30; border: 1px solid #393b40; border-radius: 6px; }
 QFrame#editor { background: #1e1f22; border: 1px solid #393b40; border-radius: 6px; }
 QFrame#bubble_user { background: #233350; border: 1px solid #2e436e; border-radius: 6px; }

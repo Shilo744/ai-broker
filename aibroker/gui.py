@@ -15,7 +15,7 @@ from PySide6.QtCore import Qt
 
 from . import assistant, client, paths, permissions, system
 from .theme import QSS, SYMBOL_ICON, dot_icon, icon, icon_pixmap, logo_pixmap, make_icon, qss, save_ico, style_titlebar, sym_icon, symbol_pixmap
-from .kit import (Bar, Chip, Dot, FlowLayout, Gauge, MessageView, ModelDelegate, Palette, ROLE_COUNT, ROLE_KIND, ROLE_RUN, ROLE_WAIT, Seg, TaskWidget, ToolHeader, Toast, tool_button)
+from .kit import (Bar, Chip, Dot, FlowLayout, Gauge, MessageView, MiniGauge, ModelDelegate, NoticeBar, Palette, ROLE_COUNT, ROLE_KIND, ROLE_RUN, ROLE_WAIT, Seg, TaskWidget, ToolHeader, tool_button)
 
 # look and feel (palette, icons, logo): see theme.py
 
@@ -30,7 +30,7 @@ KIND = {".glb": ("⬢", "#2aa198"), ".gltf": ("⬢", "#2aa198"), ".obj": ("⬢",
 
 def ltr(t):
     """keep numbers like '~7 GB' in reading order inside right-to-left text"""
-    return "‪%s‬" % t
+    return "⁦%s⁩" % t         # a bidi ISOLATE: the neighbours cannot reorder it (Terminal Grid does the same with <bdi>)
 
 
 def fmt_dur(s):
@@ -1520,6 +1520,72 @@ class LevelDialog(W.QDialog):
             card.setStyleSheet("QFrame#levelcard { background: %s; border: 1px solid %s; border-radius: 6px; }" % ("#233350" if on else "#2b2d30", "#3574f0" if on else "#393b40"))
 
 
+class LimitsPopup(W.QFrame):
+    """Limits (how much RAM / GPU the AI may take, how many jobs at once) and today's numbers. Set once and rarely changed, so they live in a small popup
+    instead of a permanent column."""
+    def __init__(self, main):
+        super().__init__(main, Qt.Popup)
+        self.main = main
+        self.setObjectName("limitspop")
+        self.setStyleSheet("QFrame#limitspop { background: #2b2d30; border: 1px solid #43454a; border-radius: 6px; }")
+        self.setMinimumWidth(380)
+        rl = W.QVBoxLayout(self)
+        rl.setContentsMargins(16, 12, 16, 14)
+        rl.setSpacing(6)
+        t = W.QLabel("מגבלות")
+        t.setObjectName("h2")
+        t.setToolTip("מגבלות רכות: המערכת מכניסה כמה שיותר עבודות בתוכן, ואפשר לשנות אותן תוך כדי ריצה")
+        rl.addWidget(t)
+        sub = W.QLabel("מכניסים כמה שיותר עבודות בתוך המגבלות האלה. אפשר לשנות תוך כדי ריצה.")
+        sub.setObjectName("muted")
+        sub.setWordWrap(True)
+        rl.addWidget(sub)
+        self.sl = {}
+        for key, label, lo, hi in (("ram_gb", "RAM ל-AI", 4, 62), ("vram_gb", "GPU ל-AI", 2, 16), ("max_jobs", "עבודות במקביל", 1, 8), ("reserve_ram_gb", "RAM שנשאר פנוי", 0, 24), ("disk_busy_pct", "עומס דיסק מרבי", 50, 100)):
+            row = W.QHBoxLayout()
+            lab = W.QLabel(label)
+            s_ = W.QSlider(Qt.Horizontal)
+            s_.setLayoutDirection(Qt.LeftToRight)
+            s_.setRange(lo, hi)
+            val = W.QLabel("")
+            val.setMinimumWidth(52)
+            val.setStyleSheet("font-weight:600;")
+            val.setLayoutDirection(Qt.LeftToRight)
+            s_.valueChanged.connect(lambda x, l=val, k=key: l.setText(fmt_limit(k, x)))
+            s_.sliderReleased.connect(lambda k=key, sl=s_: main.set_limit(k, sl.value()))
+            row.addWidget(lab, 2)
+            row.addWidget(s_, 3)
+            row.addWidget(val)
+            rl.addLayout(row)
+            self.sl[key] = (s_, val)
+        t2 = W.QLabel("היום")
+        t2.setObjectName("h2")
+        t2.setContentsMargins(0, 10, 0, 0)
+        rl.addWidget(t2)
+        card = W.QFrame()
+        card.setObjectName("statcard")
+        cv = W.QVBoxLayout(card)
+        cv.setContentsMargins(12, 10, 12, 10)
+        cv.setSpacing(7)
+        self.stat = {}
+        for key, ic_, label in (("done", "check", "עבודות שהסתיימו"), ("time", "clock", "זמן ריצה כולל"), ("ram", "layers", "שיא RAM של עבודה")):
+            r_ = W.QHBoxLayout()
+            il = W.QLabel()
+            il.setPixmap(icon_pixmap(ic_, "#868a91", 14))
+            ll = W.QLabel(label)
+            ll.setObjectName("muted")
+            vl = W.QLabel("-")
+            vl.setLayoutDirection(Qt.LeftToRight)
+            vl.setStyleSheet("font-weight:600;")
+            r_.addWidget(il)
+            r_.addWidget(ll)
+            r_.addStretch(1)
+            r_.addWidget(vl)
+            cv.addLayout(r_)
+            self.stat[key] = vl
+        rl.addWidget(card)
+
+
 class Main(W.QMainWindow):
     def __init__(self, tray=True, model=None):
         super().__init__()
@@ -1548,7 +1614,6 @@ class Main(W.QMainWindow):
         self.type_stats = {}
         self.setAcceptDrops(True)
         self._build()
-        self.toaster = Toast(self.centralWidget())
         self.tray = None
         if tray and W.QSystemTrayIcon.isSystemTrayAvailable():
             self._build_tray()
@@ -1563,7 +1628,7 @@ class Main(W.QMainWindow):
         if st.value("geometry"):
             self.restoreGeometry(st.value("geometry"))
         self.fit_to_screen()
-        for name, sp in (("split_main", self.split_main), ("split_center", self.split_center)):
+        for name, sp in (("split_main2", self.split_main), ("split_center2", self.split_center)):
             if st.value(name):
                 sp.restoreState(st.value(name))
         if self.sel_model is None:
@@ -1600,11 +1665,6 @@ class Main(W.QMainWindow):
     def showEvent(self, e):
         style_titlebar(int(self.winId()))
         super().showEvent(e)
-
-    def resizeEvent(self, e):
-        super().resizeEvent(e)
-        if getattr(self, "toaster", None) and self.toaster.isVisible():
-            self.toaster.place()
 
     def toast(self, text, kind="info", action=None, fn=None, ms=4200):
         self.toaster.show_message(text, kind, action, fn, ms)
@@ -1683,6 +1743,26 @@ class Main(W.QMainWindow):
         for b_ in (pal, ask, self.play, self.pause, adv):
             head.addWidget(b_)
         v.addWidget(bar)
+        strip = W.QFrame()
+        strip.setObjectName("resbar")
+        sh = W.QHBoxLayout(strip)
+        sh.setContentsMargins(16, 5, 12, 5)
+        sh.setSpacing(26)
+        self.g_ram, self.g_gpu = MiniGauge("RAM", "layers"), MiniGauge("GPU", "cpu")
+        self.g_disk, self.g_cpu = MiniGauge("דיסק", "hdd", 56), MiniGauge("CPU", "chart", 56)
+        for g_ in (self.g_ram, self.g_gpu, self.g_disk, self.g_cpu):
+            sh.addWidget(g_)
+        sh.addStretch(1)
+        self.lim_btn = W.QPushButton("מגבלות")
+        self.lim_btn.setObjectName("flat")
+        self.lim_btn.setIcon(icon("gear", "#868a91", 14))
+        self.lim_btn.setToolTip("כמה RAM ו-GPU מותר ל-AI לקחת, כמה עבודות במקביל, ומספרי היום")
+        self.lim_btn.clicked.connect(self.open_limits)
+        self.lim_sum = W.QLabel("")
+        self.lim_sum.setObjectName("muted")
+        sh.addWidget(self.lim_sum)
+        sh.addWidget(self.lim_btn)
+        v.addWidget(strip)
         split = W.QSplitter(Qt.Horizontal)
         split.setChildrenCollapsible(False)
         body = W.QWidget()
@@ -1690,6 +1770,8 @@ class Main(W.QMainWindow):
         bl2.setContentsMargins(8, 8, 8, 6)
         bl2.addWidget(split)
         v.addWidget(body, 1)
+        self.toaster = NoticeBar()                  # messages sit under the content, above the status bar
+        v.addWidget(self.toaster)
         mp = self._panel()
         ml = W.QVBoxLayout(mp)
         ml.setContentsMargins(0, 0, 0, 6)
@@ -1708,8 +1790,8 @@ class Main(W.QMainWindow):
         self.model_list.customContextMenuRequested.connect(self.model_menu)
         self.model_list.itemDoubleClicked.connect(lambda it: self.open_folder(it.data(Qt.UserRole)) if it.data(ROLE_KIND) == "item" and it.data(Qt.UserRole) != "__assistant__" else None)
         ml.addWidget(self.model_list, 1)
-        mp.setMinimumWidth(190)
-        mp.setMaximumWidth(300)
+        mp.setMinimumWidth(170)
+        mp.setMaximumWidth(250)
         split.addWidget(mp)
         self.split_main = split
         cs = W.QSplitter(Qt.Vertical)
@@ -1793,8 +1875,11 @@ class Main(W.QMainWindow):
             ch.addWidget(b_)
             self.btns[key] = b_
         self.tabs.setCornerWidget(corner, Qt.TopLeftCorner)
-        self.tabs.currentChanged.connect(lambda i: corner.setVisible(i == 0))
+        self.q_corner = corner
+        self.q_busy = False
+        self.tabs.currentChanged.connect(lambda i: self.sync_queue_panel(self.q_busy))
         tl.addWidget(self.tabs)
+        self.top_panel = top
         outp = self._panel()
         ol = W.QVBoxLayout(outp)
         ol.setContentsMargins(0, 0, 0, 0)
@@ -1834,75 +1919,11 @@ class Main(W.QMainWindow):
         cs.addWidget(top)
         cs.setSizes([600, 170])
         self.split_center = cs
+        QtCore.QTimer.singleShot(0, lambda: self.sync_queue_panel(False))
         split.addWidget(cs)
-        rp = self._panel()
-        rv = W.QVBoxLayout(rp)
-        rv.setContentsMargins(0, 0, 0, 0)
-        rv.setSpacing(0)
-        rv.addWidget(ToolHeader("משאבים", "cpu"))
-        rb = W.QWidget()
-        rl = W.QVBoxLayout(rb)
-        rl.setContentsMargins(14, 8, 14, 12)
-        rl.setSpacing(4)
-        rv.addWidget(rb, 1)
-        self.g_ram, self.g_gpu = Gauge("RAM", "layers"), Gauge("GPU (VRAM)", "cpu")
-        self.g_disk, self.g_cpu = Gauge("דיסק", "hdd"), Gauge("CPU", "chart")
-        for g in (self.g_ram, self.g_gpu, self.g_disk, self.g_cpu):
-            rl.addWidget(g)
-        t = W.QLabel("מגבלות")
-        t.setObjectName("h2")
-        t.setContentsMargins(0, 10, 0, 0)
-        t.setToolTip("מגבלות רכות: המערכת מכניסה כמה שיותר עבודות בתוכן, ואפשר לשנות אותן תוך כדי ריצה")
-        rl.addWidget(t)
-        self.sl = {}
-        for key, label, lo, hi in (("ram_gb", "RAM ל-AI", 4, 62), ("vram_gb", "GPU ל-AI", 2, 16), ("max_jobs", "עבודות במקביל", 1, 8), ("reserve_ram_gb", "RAM שנשאר פנוי", 0, 24), ("disk_busy_pct", "עומס דיסק מרבי", 50, 100)):
-            row = W.QHBoxLayout()
-            lab = W.QLabel(label)
-            s_ = W.QSlider(Qt.Horizontal)
-            s_.setLayoutDirection(Qt.LeftToRight)
-            s_.setRange(lo, hi)
-            val = W.QLabel("")
-            val.setMinimumWidth(52)
-            val.setStyleSheet("font-weight:600;")
-            val.setLayoutDirection(Qt.LeftToRight)
-            s_.valueChanged.connect(lambda x, l=val, k=key: l.setText(fmt_limit(k, x)))
-            s_.sliderReleased.connect(lambda k=key, sl=s_: self.set_limit(k, sl.value()))
-            row.addWidget(lab, 2)
-            row.addWidget(s_, 3)
-            row.addWidget(val)
-            rl.addLayout(row)
-            self.sl[key] = (s_, val)
-        t2 = W.QLabel("היום")
-        t2.setObjectName("h2")
-        t2.setContentsMargins(0, 12, 0, 0)
-        rl.addWidget(t2)
-        card = W.QFrame()
-        card.setObjectName("statcard")
-        cv = W.QVBoxLayout(card)
-        cv.setContentsMargins(12, 10, 12, 10)
-        cv.setSpacing(7)
-        self.stat = {}
-        for key, ic_, label in (("done", "check", "עבודות שהסתיימו"), ("time", "clock", "זמן ריצה כולל"), ("ram", "layers", "שיא RAM של עבודה")):
-            r_ = W.QHBoxLayout()
-            il = W.QLabel()
-            il.setPixmap(icon_pixmap(ic_, "#868a91", 14))
-            ll = W.QLabel(label)
-            ll.setObjectName("muted")
-            vl = W.QLabel("-")
-            vl.setLayoutDirection(Qt.LeftToRight)
-            vl.setStyleSheet("font-weight:600;")
-            r_.addWidget(il)
-            r_.addWidget(ll)
-            r_.addStretch(1)
-            r_.addWidget(vl)
-            cv.addLayout(r_)
-            self.stat[key] = vl
-        rl.addWidget(card)
-        rl.addStretch(1)
-        rp.setMinimumWidth(270)
-        rp.setMaximumWidth(330)
-        split.addWidget(rp)
-        split.setSizes([250, 740, 290])
+        self.limits_pop = LimitsPopup(self)
+        self.sl, self.stat = self.limits_pop.sl, self.limits_pop.stat
+        split.setSizes([210, 1100])
         sb = self.statusBar()
         sb.setSizeGripEnabled(False)
 
@@ -1920,8 +1941,9 @@ class Main(W.QMainWindow):
         h0.addWidget(self.sd_dot)
         h0.addWidget(self.sd_lbl)
         self.s_ram, self.s_commit, self.s_lock = Seg("layers", ""), Seg("hdd", ""), Seg("alert", "")
+        self.s_ram.setVisible(False)
         self.s_lock.setVisible(False)
-        for w_ in (w0, sep(), self.s_ram, sep(), self.s_commit, self.s_lock):
+        for w_ in (w0, sep(), self.s_commit, self.s_lock):
             sb.addWidget(w_)
         self.task = TaskWidget()
         self.task.clicked.connect(self.on_task_click)
@@ -2124,12 +2146,45 @@ class Main(W.QMainWindow):
         self.model_list.setCurrentRow(0)          # the assistant is the first entry of the list
 
     def perm_alert(self, p):
-        """Claude is waiting for a click. If the assistant page is not on screen, say so where the owner will see it."""
-        if self.assistant_mode and self.isActiveWindow():
-            return
-        self.toast("Claude מבקש אישור: " + p["text"], "warn", "פתח", self.open_claude, 20000)
-        if self.tray:
+        """Claude is waiting for a click. The question itself is in the chat; a Windows balloon is shown only when the window is hidden or minimized, and at most once a minute."""
+        hidden = (not self.isVisible()) or self.isMinimized()
+        if self.tray and hidden and time.time() - getattr(self, "_perm_balloon", 0) > 60:
+            self._perm_balloon = time.time()
             self.tray.showMessage("AI Broker", "Claude מבקש אישור: " + p["text"][:120], W.QSystemTrayIcon.Information, 8000)
+
+    def sync_perm_notice(self, pending):
+        """One row under the content while Claude waits and the assistant page is not in front (never a pop-up; the row disappears when answered)."""
+        if pending and not (self.assistant_mode and self.isActiveWindow()):
+            txt = "Claude מחכה לאישור שלך: " + pending[0]["text"] + (" (ועוד %d)" % (len(pending) - 1) if len(pending) > 1 else "")
+            self.toaster.upsert("perm", txt, "warn", "פתח", self.open_claude, 0)
+        else:
+            self.toaster.remove("perm")
+
+    def sync_queue_panel(self, busy):
+        """The queue panel shows only its tab bar while there is nothing in it (no jobs): the middle gets the room. It opens by itself when a job
+        appears or when the History tab is chosen."""
+        self.q_busy = busy
+        want_open = busy or self.tabs.currentIndex() == 1
+        pages = self.tabs.findChild(W.QStackedWidget)
+        top = self.top_panel
+        self.q_corner.setVisible(busy and self.tabs.currentIndex() == 0)
+        if want_open:
+            if pages is not None and not pages.isVisible():
+                pages.setVisible(True)
+                top.setMaximumHeight(16777215)
+                total = self.split_center.height()
+                self.split_center.setSizes([max(300, total - 240), 240])
+        elif pages is not None and pages.isVisible():
+            pages.setVisible(False)
+            top.setMaximumHeight(self.tabs.tabBar().sizeHint().height() + 8)
+
+    def open_limits(self):
+        p = self.limits_pop
+        p.adjustSize()
+        b = self.lim_btn
+        pos = b.mapToGlobal(QtCore.QPoint(b.width() - p.width(), b.height() + 4))      # under the button, its start edge aligned to the strip's end
+        p.move(pos)
+        p.show()
 
     def open_advanced(self):
         AdvancedDialog(self).exec()
@@ -2447,7 +2502,8 @@ class Main(W.QMainWindow):
         used = sy["ram_total"] - sy["ram_avail"]
         self.g_ram.set(used, sy["ram_total"], "%.0f / %.0f GB" % (used, sy["ram_total"]), marker=lim["ram_gb"])
         self.g_gpu.set(sy["gpu_used"], sy["gpu_total"], "%.1f / %.0f GB" % (sy["gpu_used"], sy["gpu_total"]), marker=lim["vram_gb"])
-        self.g_disk.set(sy["disk"], 100, "%.0f%% עסוק" % sy["disk"])
+        self.g_disk.set(sy["disk"], 100, "%.0f%%" % sy["disk"])
+        self.lim_sum.setText("עד %s · %s · %s עבודות במקביל" % (ltr("RAM %.0f GB" % lim["ram_gb"]), ltr("GPU %.0f GB" % lim["vram_gb"]), ltr("%d" % lim["max_jobs"])))
         self.g_cpu.set(sy["cpu"], 100, "%.0f%%" % sy["cpu"])
         nrun, nq = len(s["running"]), len(s["queued"])
         counts = "רצות %d, ממתינות %d" % (nrun, nq) if (nrun or nq) else "אין עבודות כרגע"
@@ -2476,9 +2532,11 @@ class Main(W.QMainWindow):
                 val.setText(fmt_limit(k, lim[k]))
         self.building = False
         self.fill_queue(s)
+        self.sync_queue_panel(bool(s["running"] or s["queued"]))
         self.refresh_chat()
         self.update_badges(s)
         self.assistant_panel.on_perms(s.get("perms") or [], s.get("assistant_level"))
+        self.sync_perm_notice(s.get("perms") or [])
         dot_col, dot_txt = {"ACTIVE": ("#5fad65", "פעיל"), "PAUSED": ("#e0a030", "מושהה"), "PLAYING": ("#db5c5c", "משחק / הקלטה"), "BRAKE": ("#db5c5c", "בלם בטיחות")}[st]
         self.sd_dot.set(dot_col)
         self.sd_lbl.setText(dot_txt)
@@ -2502,7 +2560,7 @@ class Main(W.QMainWindow):
                     self.toast("הסתיימה: " + name, "ok", "הצג", lambda j=jid: self.show_job(j))
                 elif how == "failed":
                     self.toast("נכשלה: " + name, "bad", "הצג", lambda j=jid: self.show_job(j))
-                if self.tray and how != "cancelled":
+                if self.tray and how != "cancelled" and ((not self.isVisible()) or self.isMinimized()):     # the bar under the content already told him when the window is open
                     self.tray.showMessage("AI Broker", text[:150], W.QSystemTrayIcon.Information, 6000)
         self.log_text = self.log_text[-60000:]
         if s["hist_rev"] != self.hist_rev:
@@ -2591,8 +2649,8 @@ class Main(W.QMainWindow):
             return
         st = self.settings
         st.setValue("geometry", self.saveGeometry())
-        st.setValue("split_main", self.split_main.saveState())
-        st.setValue("split_center", self.split_center.saveState())
+        st.setValue("split_main2", self.split_main.saveState())
+        st.setValue("split_center2", self.split_center.saveState())
         st.setValue("zoom", self.zoom)
 
     def closeEvent(self, e):

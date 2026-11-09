@@ -165,6 +165,37 @@ class Gauge(W.QWidget):
         self.spark.push(f, color)
 
 
+class MiniGauge(W.QFrame):
+    """One resource in the strip under the header: icon, name, a thin bar (the blue tick is the limit you set) and the numbers. Same set() as Gauge."""
+    def __init__(self, caption, icon_name="cpu", bar_w=96):
+        super().__init__()
+        self.setObjectName("minigauge")
+        h = W.QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(7)
+        ic = W.QLabel()
+        ic.setPixmap(icon_pixmap(icon_name, MUTED, 14))
+        self.cap = W.QLabel(caption)
+        self.cap.setStyleSheet("font-weight:600;")
+        self.bar = Bar()
+        self.bar.setFixedWidth(bar_w)
+        self.num = W.QLabel("")
+        self.num.setLayoutDirection(Qt.LeftToRight)
+        self.num.setObjectName("muted")
+        self.num.setMinimumWidth(78)
+        for w in (ic, self.cap, self.bar, self.num):
+            h.addWidget(w)
+
+    def set(self, used, total, num_text, marker=None):
+        f = max(0.0, min(1.0, used / total if total else 0))
+        color = OK if f < 0.6 else WARN if f < 0.85 else BAD
+        self.num.setText(num_text)
+        self.num.setStyleSheet("color:%s;" % (color if f >= 0.6 else SUB))
+        self.bar.f, self.bar.color = f, color
+        self.bar.marker = (marker / total) if (marker and total) else None
+        self.bar.update()
+
+
 # ------------------------------------------------------------------ chips and pills
 CHIP_COLORS = {"ok": (OK, "#1f3524"), "bad": (BAD, "#3b2325"), "warn": (WARN, "#3a2f18"), "info": (ACCENT, "#233350"), "muted": (MUTED, "#2f3135")}
 
@@ -242,71 +273,98 @@ class FlowLayout(W.QLayout):
         return y + line_h - rect.y()
 
 
-# ------------------------------------------------------------------ toast
-class Toast(W.QFrame):
-    """A small message that appears at the bottom of the window and fades away (feedback without dialogs)."""
-    KINDS = {"ok": ("check", OK), "bad": ("alert", BAD), "info": ("info", ACCENT), "warn": ("alert", WARN)}
+# ------------------------------------------------------------------ notices
+class Elided(W.QLabel):
+    """One line of text that ends with an ellipsis instead of widening the window."""
+    def minimumSizeHint(self):
+        return QtCore.QSize(40, self.fontMetrics().height())
 
-    def __init__(self, parent):
+    def paintEvent(self, e):
+        p = QtGui.QPainter(self)
+        p.setPen(self.palette().color(QtGui.QPalette.WindowText))
+        txt = self.fontMetrics().elidedText(self.text(), Qt.ElideRight, self.width())
+        p.drawText(self.rect(), int(self.alignment()), txt)
+
+
+class NoticeBar(W.QFrame):
+    """Messages live UNDER the content, docked above the status bar: they push the content up a little and never cover it (owner's rule).
+    The same text twice is one row. A row with ms=0 stays until it is removed, for example "Claude is waiting for your approval"."""
+    KINDS = {"ok": ("check", OK, "#1f3524"), "bad": ("alert", BAD, "#3b2325"), "info": ("info", ACCENT, "#233350"), "warn": ("alert", WARN, "#3a2f18")}
+    MAX_ROWS = 3
+
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.setObjectName("toast")
-        h = W.QHBoxLayout(self)
-        h.setContentsMargins(12, 8, 10, 8)
-        h.setSpacing(8)
-        self.ic = W.QLabel()
-        self.msg = W.QLabel()
-        self.act = W.QPushButton()
-        self.act.setObjectName("flat")
-        self.act.setCursor(Qt.PointingHandCursor)
-        h.addWidget(self.ic)
-        h.addWidget(self.msg)
-        h.addWidget(self.act)
-        self.fx = W.QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(self.fx)
-        self.anim = QtCore.QPropertyAnimation(self.fx, b"opacity", self)
-        self.timer = QtCore.QTimer(self)
-        self.timer.setSingleShot(True)
-        self.timer.timeout.connect(self.fade)
-        self.anim.finished.connect(self._done)
-        self._act_fn = None
-        self.act.clicked.connect(self._on_act)
-        self.hide()
+        self.setObjectName("notices")
+        self.lay = W.QVBoxLayout(self)
+        self.lay.setContentsMargins(0, 0, 0, 0)
+        self.lay.setSpacing(0)
+        self.rows = {}
+        self.setVisible(False)
+
+    def _make(self, key):
+        row = W.QFrame()
+        row.setObjectName("notice")
+        h = W.QHBoxLayout(row)
+        h.setContentsMargins(14, 5, 8, 5)
+        h.setSpacing(9)
+        row.ic = W.QLabel()
+        row.msg = Elided()
+        row.act = W.QPushButton()
+        row.act.setObjectName("flat")
+        row.act.setCursor(Qt.PointingHandCursor)
+        row.close_btn = tool_button("x", "סגור", None, size=13)
+        h.addWidget(row.ic)
+        h.addWidget(row.msg, 1)
+        h.addWidget(row.act)
+        h.addWidget(row.close_btn)
+        row.timer = QtCore.QTimer(row)
+        row.timer.setSingleShot(True)
+        row.timer.timeout.connect(lambda k=key: self.remove(k))
+        row.close_btn.clicked.connect(lambda _=False, k=key: self.remove(k))
+        row.fn = None
+        row.act.clicked.connect(lambda _=False, k=key: self._act(k))
+        self.lay.addWidget(row)
+        return row
+
+    def _act(self, key):
+        row = self.rows.get(key)
+        fn = row.fn if row else None
+        if not key.startswith("perm"):                  # a question stays until it is answered; everything else goes away when used
+            self.remove(key)
+        if fn:
+            fn()
+
+    def upsert(self, key, text, kind="info", action=None, fn=None, ms=4200):
+        row = self.rows.get(key)
+        if row is None:
+            row = self.rows[key] = self._make(key)
+        name, color, bg = self.KINDS.get(kind, self.KINDS["info"])
+        row.setStyleSheet("QFrame#notice { background: %s; border-top: 1px solid #393b40; }" % bg)
+        row.ic.setPixmap(icon_pixmap(name, color, 16))
+        row.msg.setText(text)
+        row.msg.setToolTip(text)
+        row.act.setVisible(bool(action))
+        row.act.setText(action or "")
+        row.fn = fn
+        row.timer.stop()
+        if ms:
+            row.timer.start(ms)
+        while len(self.rows) > self.MAX_ROWS:           # the oldest row that does not wait for the owner goes first
+            victim = next((k for k in self.rows if k != key and not k.startswith("perm")), next(iter(self.rows)))
+            self.remove(victim)
+        self.setVisible(True)
+
+    def remove(self, key):
+        row = self.rows.pop(key, None)
+        if row is not None:
+            row.timer.stop()
+            self.lay.removeWidget(row)
+            row.deleteLater()
+        if not self.rows:
+            self.setVisible(False)
 
     def show_message(self, text, kind="info", action=None, fn=None, ms=4200):
-        name, color = self.KINDS.get(kind, self.KINDS["info"])
-        self.ic.setPixmap(icon_pixmap(name, color, 16))
-        self.msg.setText(text)
-        self.act.setVisible(bool(action))
-        self.act.setText(action or "")
-        self._act_fn = fn
-        self.adjustSize()
-        self.place()
-        self.anim.stop()
-        self.fx.setOpacity(1.0)
-        self.show()
-        self.raise_()
-        self.timer.start(ms)
-
-    def place(self):
-        p = self.parentWidget()
-        if p:
-            self.move((p.width() - self.width()) // 2, p.height() - self.height() - 44)
-
-    def fade(self):
-        self.anim.setDuration(400)
-        self.anim.setStartValue(1.0)
-        self.anim.setEndValue(0.0)
-        self.anim.start()
-
-    def _done(self):
-        if self.fx.opacity() < 0.05:
-            self.hide()
-
-    def _on_act(self):
-        self.timer.stop()
-        self.hide()
-        if self._act_fn:
-            self._act_fn()
+        self.upsert(text, text, kind, action, fn, ms)
 
 
 # ------------------------------------------------------------------ model list rows
