@@ -534,3 +534,70 @@ class Palette(W.QDialog):
         self.move(p.mapToGlobal(QtCore.QPoint((g.width() - self.width()) // 2, 70)))
         self.show()
         self.edit.setFocus()
+
+
+class MessageView(W.QTextBrowser):
+    """Chat message text, Markdown or plain. Every paragraph gets its direction from the majority script (see rtltext.py), so a Hebrew sentence that
+    starts with an English product name is still laid out right-to-left. Height follows the content; no scrollbars; text stays selectable."""
+
+    def __init__(self, text="", markdown=False, max_width=720, muted=False, bold=False):
+        super().__init__()
+        self._max = max_width
+        if bold:
+            f = self.document().defaultFont()
+            f.setBold(True)
+            self.document().setDefaultFont(f)
+        self.setFrameShape(W.QFrame.NoFrame)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setOpenExternalLinks(True)
+        self.setSizePolicy(W.QSizePolicy.Preferred, W.QSizePolicy.Minimum)
+        self.document().setDocumentMargin(0)
+        pal = self.palette()
+        pal.setColor(QtGui.QPalette.Link, QtGui.QColor("#6ea0ff"))
+        self.setPalette(pal)
+        self.setStyleSheet("QTextBrowser { background: transparent; border: none; color: %s; selection-background-color: %s; }" % (SUB if muted else TEXT, SELECT))
+        self.viewport().setCursor(Qt.IBeamCursor)
+        self.set_content(text, markdown)
+
+    def set_content(self, text, markdown=False):
+        from .rtltext import apply_directions
+        doc = self.document()
+        if markdown:
+            doc.setMarkdown(text)
+        else:
+            doc.setPlainText(text)
+        apply_directions(doc)
+        self._fit(max(60, self.width()))
+        self.updateGeometry()
+
+    def _natural_width(self):
+        """Width of the longest paragraph without wrapping. Measured on a copy, so the visible document keeps its wrapping width."""
+        probe = self.document().clone()
+        probe.setTextWidth(-1)
+        return int(probe.idealWidth()) + 3
+
+    def _fit(self, width):
+        doc = self.document()
+        if abs(doc.textWidth() - width) > 0.5:
+            doc.setTextWidth(width)
+        h = int(doc.size().height() + 1.5)
+        if h != self.height() or self.minimumHeight() != h:
+            self.setFixedHeight(h)
+
+    def sizeHint(self):
+        w = min(self._max, self._natural_width())
+        probe = self.document().clone()
+        probe.setTextWidth(w)
+        return QtCore.QSize(w, int(probe.size().height() + 1.5))
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._fit(max(60, self.viewport().width()))
+
+    def minimumSizeHint(self):
+        return QtCore.QSize(60, self.height())
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._fit(max(60, self.viewport().width()))

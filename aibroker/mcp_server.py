@@ -237,6 +237,37 @@ def job_history(limit: Annotated[int, Field(ge=1, le=100)] = 15) -> dict:
     return r if not r.get("ok") else {"ok": True, "jobs": [_brief(j) for j in r["jobs"]]}
 
 
+@mcp.tool()
+def hardware_profile() -> dict:
+    """What this computer can do: graphics card name and VRAM, RAM, free space on every drive, installed tools (Blender, ComfyUI, Python, git, ffmpeg) and the broker's
+    limits. Use this to judge which models fit. NEVER run a shell command (Get-PSDrive, nvidia-smi ...) to look at the machine: this tool needs no approval."""
+    return _call({"op": "hardware"}, timeout=20)
+
+
+# The permission handler exists only for the assistant inside the AI Broker window (the window starts it with AIBROKER_ASSISTANT=1); other agents never see it.
+if os.environ.get("AIBROKER_ASSISTANT") == "1":
+    import json
+
+    @mcp.tool(structured_output=False)
+    def approve(tool_name: str, input: dict, tool_use_id: str = "") -> str:
+        """INTERNAL: Claude Code asks here whether a tool call may run. The broker applies the owner's permission level and, when needed, shows a question in the window and
+        waits for the owner's click. Not for agents to call."""
+        r = _call({"op": "perm_ask", "tool": tool_name, "input": input}, timeout=10)
+        if not r.get("ok"):
+            return json.dumps({"behavior": "deny", "message": "The broker service cannot be reached, so nothing can be approved right now."})
+        pid, state, msg = r["id"], r["state"], r.get("message", "")
+        t0 = time.time()
+        while state == "pending" and time.time() - t0 < 900:           # the owner has up to 15 minutes to answer
+            time.sleep(0.6)
+            g = _call({"op": "perm_get", "id": pid}, timeout=10)
+            if not g.get("ok"):
+                break
+            state, msg = g["state"], g.get("message", "")
+        if state == "allow":
+            return json.dumps({"behavior": "allow", "updatedInput": input})
+        return json.dumps({"behavior": "deny", "message": msg or "The owner did not approve this action. Continue without it, or suggest an alternative."})
+
+
 def main():
     mcp.run("stdio")
 

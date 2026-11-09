@@ -18,7 +18,7 @@ import traceback
 
 import psutil
 
-from . import paths, scheduler, store as st, winutil as wu
+from . import hardware, paths, permissions, scheduler, store as st, winutil as wu
 
 TERMINAL = ("done", "failed", "cancelled", "lost")
 
@@ -63,6 +63,8 @@ class Broker:
         self.lock = threading.RLock()
         self.events = collections.deque(maxlen=400)
         self.ev_n = 0
+        self.perms = {}                    # permission requests of the in-window assistant (id -> entry), see perm_ask
+        self.perm_n = 0
         self.sys = {}
         self.reasons = {}
         self.brake = None
@@ -576,7 +578,60 @@ class Broker:
                         flags={k: self.cfg[k] for k in ("suspend_on_pause", "playing_suspends_gpu", "emergency_suspend", "affinity", "backfill", "toast", "respect_gpu_lock")},
                         running=running, queued=queued, budget=dict(ram=est_ram, vram=est_vram), hist_rev=self.hist_rev,
                         lock="ours" if self.owns_lock else wu.lock_state(self.cfg["gpu_lock_path"], False), lock_holder=wu.lock_holder(self.cfg["gpu_lock_path"]),
-                        events=[e for e in self.events if e[0] > ev_since], ev_n=self.ev_n, uptime=time.time() - self.t_start, pid=os.getpid())
+                        events=[e for e in self.events if e[0] > ev_since], ev_n=self.ev_n, uptime=time.time() - self.t_start, pid=os.getpid(),
+                        perms=self.perm_pending(), assistant_level=self.cfg.get("assistant_level", permissions.DEFAULT_LEVEL))
+
+    # ------------------------------------------------------------ the in-window assistant asks for permission
+    def perm_ask(self, req):
+        """Claude Code (headless, in the window) asks if a tool call may run. The permission level the owner chose decides: allow at once, deny, or put a
+        question in the window and wait (perm_get polls, perm_answer is the owner's click)."""
+        tool = str(req.get("tool", ""))
+        v = permissions.analyze(tool, req.get("input") or {})
+        level = self.cfg.get("assistant_level", permissions.DEFAULT_LEVEL)
+        decision = permissions.decide(level, v)
+        with self.lock:
+            self.perm_n += 1
+            now = time.time()
+            e = dict(id=self.perm_n, ts=now, polled=now, tool=tool, text=v.text, risk=v.risk, kind=v.kind, why=v.why, detail=(v.detail or "")[:3000], shell=v.shell,
+                     level=level, state={"allow": "allow", "deny": "deny", "ask": "pending"}[decision], message="")
+            if decision == "deny":
+                e["message"] = "חסום תמיד: %s. %s" % (v.text, v.why)
+            for k in [k for k, x in self.perms.items() if now - x["ts"] > 3600]:
+                del self.perms[k]
+            self.perms[e["id"]] = e
+        self.log("assistant %s [%s]: %s" % (decision if decision != "ask" else "asks the owner", level, v.text))
+        return dict(ok=True, id=e["id"], state=e["state"], message=e["message"], text=e["text"])
+
+    def perm_get(self, pid):
+        with self.lock:
+            e = self.perms.get(pid)
+            if not e:
+                return dict(ok=False, error="no such request")
+            e["polled"] = time.time()
+            return dict(ok=True, state=e["state"], message=e["message"])
+
+    def perm_answer(self, pid, allow, message=""):
+        with self.lock:
+            e = self.perms.get(pid)
+            if not e or e["state"] != "pending":
+                return dict(ok=False, error="request is not waiting")
+            e["state"] = "allow" if allow else "deny"
+            e["message"] = "" if allow else (message or "המשתמש דחה את הפעולה. הצע חלופה או המשך בלי זה.")
+        self.log("owner %s: %s" % ("allowed" if allow else "declined", e["text"]))
+        return dict(ok=True)
+
+    def perm_pending(self):
+        """Questions waiting for the owner. One that Claude stopped polling for (the turn was cancelled) is dropped."""
+        now = time.time()
+        out = []
+        for e in self.perms.values():
+            if e["state"] != "pending":
+                continue
+            if now - e["polled"] > 20:
+                e["state"] = "expired"
+                continue
+            out.append({k: e[k] for k in ("id", "ts", "tool", "text", "risk", "kind", "why", "detail", "shell", "level")})
+        return out
 
     def tail(self, jid, nbytes=20000):
         j = self.store.get(jid)
@@ -657,6 +712,20 @@ class Broker:
                     self.save_cfg()
                     self.log("limits/flags changed: %s %s" % (req.get("set") or "", req.get("flags") or ""))
                 return dict(ok=True, limits=c["limits"])
+        if op == "assistant_level":
+            if req.get("set") in permissions.LEVEL_KEYS:
+                c["assistant_level"] = req["set"]
+                self.save_cfg()
+                self.log("assistant permission level -> %s" % req["set"])
+            return dict(ok=True, level=c.get("assistant_level", permissions.DEFAULT_LEVEL))
+        if op == "perm_ask":
+            return self.perm_ask(req)
+        if op == "perm_get":
+            return self.perm_get(int(req["id"]))
+        if op == "perm_answer":
+            return self.perm_answer(int(req["id"]), bool(req.get("allow")), str(req.get("message", "")))
+        if op == "hardware":
+            return hardware.profile()
         if op == "tail":
             return dict(ok=True, text=self.tail(int(req["id"]), int(req.get("bytes", 20000))))
         if op == "types":

@@ -13,9 +13,9 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets as W
 from PySide6.QtCore import Qt
 
-from . import assistant, client, paths, system
+from . import assistant, client, paths, permissions, system
 from .theme import QSS, SYMBOL_ICON, dot_icon, icon, icon_pixmap, logo_pixmap, make_icon, qss, save_ico, style_titlebar, sym_icon, symbol_pixmap
-from .kit import (Bar, Chip, Dot, FlowLayout, Gauge, ModelDelegate, Palette, ROLE_COUNT, ROLE_KIND, ROLE_RUN, ROLE_WAIT, Seg, TaskWidget, ToolHeader, Toast, tool_button)
+from .kit import (Bar, Chip, Dot, FlowLayout, Gauge, MessageView, ModelDelegate, Palette, ROLE_COUNT, ROLE_KIND, ROLE_RUN, ROLE_WAIT, Seg, TaskWidget, ToolHeader, Toast, tool_button)
 
 # look and feel (palette, icons, logo): see theme.py
 
@@ -663,8 +663,19 @@ def aligned(bubble, who):
     return row
 
 
+def aligned_start(bubble):
+    """Anchor a bubble to the START side of the window (the right edge in Hebrew), whoever speaks: a Hebrew conversation is read from the right.
+    Who is speaking is shown by the colour of the bubble and its header, not by the side."""
+    row = W.QWidget()
+    h = W.QHBoxLayout(row)
+    h.setContentsMargins(0, 0, 0, 0)
+    h.addWidget(bubble)
+    h.addStretch(1)
+    return row
+
+
 class Bubble(W.QFrame):
-    def __init__(self, who):
+    def __init__(self, who, max_width=640):
         super().__init__()
         self.who = who
         self.setObjectName("bubble_user" if who == "user" else "bubble_model")
@@ -672,7 +683,14 @@ class Bubble(W.QFrame):
         self.lay.setContentsMargins(14, 10, 14, 10)
         self.lay.setSpacing(8)
         self.setMinimumWidth(300)
-        self.setMaximumWidth(640)
+        self.setMaximumWidth(max_width)
+        self.max_width = max_width
+
+    def message(self, t, markdown=False, muted=False, bold=False):
+        """Message text with a direction per paragraph (majority script): Hebrew with English names and numbers inside reads correctly."""
+        v = MessageView(t, markdown=markdown, max_width=self.max_width - 30, muted=muted, bold=bold)
+        self.lay.addWidget(v)
+        return v
 
     def header(self, name, icon_name=None, when="", color="#b4b8bf", chip=None):
         """Who is speaking: small icon, name, then the time (and a status chip at the end)."""
@@ -1181,6 +1199,14 @@ class AssistantPanel(W.QFrame):
         i = self.model_box.findData(self.qs.value("model", "haiku"))
         self.model_box.setCurrentIndex(max(0, i))
         self.model_box.currentIndexChanged.connect(lambda: self.qs.setValue("model", self.model_box.currentData()))
+        self.level = permissions.DEFAULT_LEVEL
+        self.perm_cards = {}
+        self.level_btn = W.QPushButton()
+        self.level_btn.setObjectName("tool")
+        self.level_btn.setIcon(icon("shield", "#b4b8bf", 15))
+        self.level_btn.clicked.connect(self.choose_level)
+        self.set_level_label()
+        th.h.addWidget(self.level_btn)
         th.h.addWidget(self.model_box)
         th.add_action("refresh", "שיחה חדשה", self.reset)
         outer.addWidget(th)
@@ -1239,13 +1265,10 @@ class AssistantPanel(W.QFrame):
 
     # --- bubbles
     def add_bubble(self, role, text, save=True, md=False):
-        b = Bubble("user" if role == "user" else "model")
+        b = Bubble("user" if role == "user" else "model", 600 if role == "user" else 860)
         b.header("אתה" if role == "user" else "Claude", "user" if role == "user" else "sparkles")
-        l = b.text(text)
-        if md:
-            l.setTextFormat(Qt.MarkdownText)
-            l.setOpenExternalLinks(True)
-        self.col.insertWidget(self.col.count() - 1, aligned(b, "user" if role == "user" else "model"))
+        b.message(text, markdown=md)
+        self.col.insertWidget(self.col.count() - 1, aligned_start(b))
         if save:
             self.hist["messages"].append({"role": role, "text": text})
             assistant.save_history(self.hist)
@@ -1258,14 +1281,14 @@ class AssistantPanel(W.QFrame):
             if it.widget():
                 it.widget().deleteLater()
         self.col.addStretch(1)
-        w = Bubble("model")
-        w.text("שלום. אני העוזר של התוכנה. אני רואה את התור, המשאבים והתוצאות, יכול להריץ עבודות בשבילך, ולעזור לבחור ולהוריד מודלים (הורדה רק אחרי שתאשר כאן בצ'אט). שאל אותי משהו, או לחץ על דוגמה:")
+        w = Bubble("model", 860)
+        w.message("שלום. אני העוזר של התוכנה. אני רואה את התור, המשאבים והתוצאות, יכול להריץ עבודות בשבילך, ולעזור לבחור ולהוריד מודלים (הורדה רק אחרי שתאשר כאן בצ'אט). שאל אותי משהו, או לחץ על דוגמה:")
         for ex in self.EXAMPLES:
             b = W.QPushButton(ex)
             b.setObjectName("tool")
             b.clicked.connect(lambda _=False, e=ex: (self.edit.setPlainText(e), self.on_send_click()))
             w.lay.addWidget(b)
-        self.col.insertWidget(0, aligned(w, "model"))
+        self.col.insertWidget(0, aligned_start(w))
         for m in self.hist.get("messages", []):
             self.add_bubble(m["role"], m["text"], save=False, md=(m["role"] != "user"))
 
@@ -1315,7 +1338,7 @@ class AssistantPanel(W.QFrame):
                 self.turn_text = True
                 self.add_bubble("assistant", blk["text"].strip(), md=True)
             elif blk.get("type") == "tool_use":
-                self.activity.setText(assistant.FRIENDLY.get(blk.get("name", ""), "עובד על זה") + "…")
+                self.activity.setText(permissions.analyze(blk.get("name", ""), blk.get("input") or {}).text + "…")
 
     def on_done(self, res):
         self.activity.setVisible(False)
@@ -1328,49 +1351,173 @@ class AssistantPanel(W.QFrame):
             self.add_bubble("assistant", "משהו השתבש: " + res["error"])
         elif res["ok"] and not self.turn_text and res.get("text"):
             self.add_bubble("assistant", res["text"], md=True)
-        if res.get("denials"):
-            self.ask(res["denials"])
+        for pid in list(self.perm_cards):                       # a question that was still open when the turn ended can no longer be answered
+            if not self.perm_cards[pid]["answered"]:
+                self.finish_perm(pid, "פג תוקף")
 
-    # --- approvals inside the chat
-    def ask(self, denials):
-        seen, items = set(), []
-        for d in denials:
-            key = (d.get("tool_name"), json.dumps(d.get("tool_input"), sort_keys=True))
-            if key not in seen:
-                seen.add(key)
-                items.append(d)
-        self.pending = []
-        for d in items:
-            b = Bubble("model")
-            b.header("Claude", "sparkles", "מבקש אישור", "#e0a030")
-            b.text("Claude מבקש רשות " + assistant.describe_denial(d))
-            row = W.QHBoxLayout()
-            yes = W.QPushButton("אשר")
-            yes.setObjectName("primary")
-            no = W.QPushButton("דחה")
-            row.addWidget(yes)
-            row.addWidget(no)
-            row.addStretch(1)
-            b.lay.addLayout(row)
-            self.col.insertWidget(self.col.count() - 1, aligned(b, "model"))
-            entry = {"d": d, "answer": None, "bubble": b, "yes": yes, "no": no}
-            self.pending.append(entry)
-            yes.clicked.connect(lambda _=False, e=entry: self.answer(e, True))
-            no.clicked.connect(lambda _=False, e=entry: self.answer(e, False))
+    # --- permission level and approvals inside the chat
+    def set_level_label(self):
+        label = next((l for k, l, *_ in permissions.LEVELS if k == self.level), "")
+        self.level_btn.setText("הרשאות: " + label)
+        self.level_btn.setToolTip(next((long for k, _l, _s, long in permissions.LEVELS if k == self.level), "") + "\n\nלחץ כדי לבחור רמה אחרת.")
+
+    def choose_level(self):
+        dlg = LevelDialog(self.main, self.level, self.qs)
+        if dlg.exec() == W.QDialog.Accepted and dlg.choice != self.level:
+            try:
+                r = client.call({"op": "assistant_level", "set": dlg.choice}, timeout=5)
+            except client.BrokerDown:
+                r = None
+            if r and r.get("ok"):
+                self.level = r["level"]
+                self.set_level_label()
+                self.main.toast("רמת ההרשאות של Claude: " + next(l for k, l, *_ in permissions.LEVELS if k == self.level), "ok")
+            else:
+                self.main.toast("לא הצלחתי לשנות את רמת ההרשאות (השירות לא עונה)", "bad")
+
+    def on_perms(self, perms, level=None):
+        """Called with every state update: the broker's questions that wait for the owner (and his current permission level)."""
+        if level and level != self.level:
+            self.level = level
+            self.set_level_label()
+        live = {p["id"] for p in perms}
+        for p in perms:
+            if p["id"] not in self.perm_cards:
+                self.show_perm(p)
+        for pid, c in list(self.perm_cards.items()):
+            if pid not in live and not c["answered"]:
+                self.finish_perm(pid, "פג תוקף (Claude הפסיק לחכות)")
+        if live and self.worker and self.worker.isRunning():
+            self.activity.setText("מחכה לאישור שלך…")
+
+    def show_perm(self, p):
+        danger = p.get("risk") == "danger"
+        b = Bubble("model", 860)
+        b.header("Claude", "sparkles", "מבקש אישור", "#db5c5c" if danger else "#e0a030")
+        b.message(p["text"], bold=True)
+        why = p.get("why") or ""
+        if why:
+            b.message(why, muted=True)
+        detail = (p.get("detail") or "").strip()
+        box = toggle = None
+        if detail:
+            toggle = W.QPushButton("הצג את הפקודה")
+            toggle.setObjectName("tool")
+            toggle.setCheckable(True)
+            box = W.QPlainTextEdit(detail)
+            box.setReadOnly(True)
+            box.setLayoutDirection(Qt.LeftToRight)
+            box.setFixedHeight(min(190, 26 + 17 * (detail.count("\n") + 1 + len(detail) // 62)))
+            box.setStyleSheet("QPlainTextEdit { background: #1e1f22; border: 1px solid #393b40; border-radius: 4px; color: #b4b8bf; font-family: Consolas; font-size: 9.5pt; }")
+            box.setVisible(False)
+            toggle.toggled.connect(lambda on, bx=box, tg=toggle: (bx.setVisible(on), tg.setText("הסתר את הפקודה" if on else "הצג את הפקודה")))
+            row0 = W.QHBoxLayout()
+            row0.addWidget(toggle)
+            row0.addStretch(1)
+            b.lay.addLayout(row0)
+            b.lay.addWidget(box)
+        yes = W.QPushButton("אשר, אני מבין שזה מסוכן" if danger else "אשר")
+        yes.setObjectName("danger" if danger else "primary")
+        no = W.QPushButton("דחה")
+        row = W.QHBoxLayout()
+        row.addWidget(yes)
+        row.addWidget(no)
+        row.addStretch(1)
+        b.lay.addLayout(row)
+        holder = aligned_start(b)
+        self.col.insertWidget(self.col.count() - 1, holder)
+        self.perm_cards[p["id"]] = {"bubble": b, "yes": yes, "no": no, "answered": False, "holder": holder}
+        yes.clicked.connect(lambda _=False, i=p["id"]: self.answer_perm(i, True))
+        no.clicked.connect(lambda _=False, i=p["id"]: self.answer_perm(i, False))
         QtCore.QTimer.singleShot(30, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))
+        self.main.perm_alert(p)
 
-    def answer(self, entry, ok):
-        entry["answer"] = ok
-        entry["yes"].setEnabled(False)
-        entry["no"].setEnabled(False)
-        entry["bubble"].text("אישרת" if ok else "דחית", muted=True)
-        if all(e["answer"] is not None for e in self.pending):
-            approved = [e for e in self.pending if e["answer"]]
-            rules = [assistant.allow_rule(e["d"]) for e in approved]
-            msg = ("אישרתי: " + "; ".join(assistant.describe_denial(e["d"]) for e in approved) + ". תמשיך.") if approved else "לא אישרתי. תמשיך בלי זה, או תציע חלופה."
-            self.pending = []
-            self.add_bubble("user", "אישרתי" if approved else "לא אישרתי")
-            self.start_turn(msg, rules)
+    def finish_perm(self, pid, note):
+        c = self.perm_cards.get(pid)
+        if not c or c["answered"]:
+            return
+        c["answered"] = True
+        c["yes"].setEnabled(False)
+        c["no"].setEnabled(False)
+        c["bubble"].message(note, muted=True)
+
+    def answer_perm(self, pid, ok):
+        c = self.perm_cards.get(pid)
+        if not c or c["answered"]:
+            return
+        try:
+            r = client.call({"op": "perm_answer", "id": pid, "allow": ok}, timeout=5)
+        except client.BrokerDown:
+            r = None
+        self.finish_perm(pid, ("אישרת" if ok else "דחית") if r and r.get("ok") else "לא הצלחתי לשלוח את התשובה (Claude כבר לא מחכה)")
+
+
+class LevelDialog(W.QDialog):
+    """How much may Claude do without asking? Three levels, each explained in plain Hebrew. The owner chooses; the choice applies at once."""
+    def __init__(self, parent, current, qs):
+        super().__init__(parent)
+        self.qs = qs
+        self.choice = current
+        self.setWindowTitle("רמת ההרשאות של Claude")
+        self.setMinimumWidth(560)
+        v = W.QVBoxLayout(self)
+        v.setContentsMargins(22, 20, 22, 18)
+        v.setSpacing(10)
+        h = W.QLabel("כמה Claude רשאי לעשות בלי לשאול אותך?")
+        h.setStyleSheet("font-size: 13.5pt; font-weight: 600;")
+        v.addWidget(h)
+        sub = W.QLabel("אתה בוחר. אפשר לשנות בכל רגע, והשינוי חל מיד.")
+        sub.setObjectName("muted")
+        v.addWidget(sub)
+        self.cards = {}
+        self.group = W.QButtonGroup(self)
+        for key, label, short, long in permissions.LEVELS:
+            card = W.QFrame()
+            card.setObjectName("levelcard")
+            cl = W.QVBoxLayout(card)
+            cl.setContentsMargins(14, 10, 14, 12)
+            cl.setSpacing(4)
+            rb = W.QRadioButton("%s  -  %s%s" % (label, short, "   (מומלץ)" if key == "normal" else ""))
+            rb.setStyleSheet("font-weight: 600; font-size: 10.5pt;")
+            rb.setChecked(key == current)
+            self.group.addButton(rb)
+            cl.addWidget(rb)
+            cl.addWidget(MessageView(long, max_width=520, muted=True))
+            rb.toggled.connect(lambda on, k=key: on and self.pick(k))
+            self.cards[key] = (card, rb)
+            v.addWidget(card)
+        note = MessageView("חסום תמיד, בכל רמה: פירמוט דיסקים, שינוי רישום המערכת והגדרות האבטחה, וההגדרות של Claude עצמו.", max_width=520, muted=True)
+        v.addWidget(note)
+        row = W.QHBoxLayout()
+        ok = W.QPushButton("סגור")
+        ok.setObjectName("primary")
+        ok.clicked.connect(self.accept)
+        row.addStretch(1)
+        row.addWidget(ok)
+        v.addLayout(row)
+        self.paint()
+
+    def pick(self, key):
+        if key == "free" and not self.qs.value("free_confirmed"):
+            m = W.QMessageBox(self)
+            m.setWindowTitle("רמה חופשית")
+            m.setIcon(W.QMessageBox.Warning)
+            m.setText("ברמה ״חופשי״ Claude יוכל להוריד קבצים, להתקין תוכנות ולכתוב קבצים בלי לשאול אותך.")
+            m.setInformativeText("מחיקות ועצירת תוכנות עדיין דורשות אישור, ופעולות מסוכנות במיוחד חסומות. להפעיל?")
+            yes = m.addButton("כן, חופשי", W.QMessageBox.AcceptRole)
+            m.addButton("ביטול", W.QMessageBox.RejectRole)
+            m.exec()
+            if m.clickedButton() is not yes:
+                self.cards[self.choice][1].setChecked(True)
+                return
+            self.qs.setValue("free_confirmed", True)
+        self.choice = key
+        self.paint()
+
+    def paint(self):
+        for key, (card, _rb) in self.cards.items():
+            on = key == self.choice
+            card.setStyleSheet("QFrame#levelcard { background: %s; border: 1px solid %s; border-radius: 6px; }" % ("#233350" if on else "#2b2d30", "#3574f0" if on else "#393b40"))
 
 
 class Main(W.QMainWindow):
@@ -1976,6 +2123,14 @@ class Main(W.QMainWindow):
     def open_claude(self):
         self.model_list.setCurrentRow(0)          # the assistant is the first entry of the list
 
+    def perm_alert(self, p):
+        """Claude is waiting for a click. If the assistant page is not on screen, say so where the owner will see it."""
+        if self.assistant_mode and self.isActiveWindow():
+            return
+        self.toast("Claude מבקש אישור: " + p["text"], "warn", "פתח", self.open_claude, 20000)
+        if self.tray:
+            self.tray.showMessage("AI Broker", "Claude מבקש אישור: " + p["text"][:120], W.QSystemTrayIcon.Information, 8000)
+
     def open_advanced(self):
         AdvancedDialog(self).exec()
 
@@ -2323,6 +2478,7 @@ class Main(W.QMainWindow):
         self.fill_queue(s)
         self.refresh_chat()
         self.update_badges(s)
+        self.assistant_panel.on_perms(s.get("perms") or [], s.get("assistant_level"))
         dot_col, dot_txt = {"ACTIVE": ("#5fad65", "פעיל"), "PAUSED": ("#e0a030", "מושהה"), "PLAYING": ("#db5c5c", "משחק / הקלטה"), "BRAKE": ("#db5c5c", "בלם בטיחות")}[st]
         self.sd_dot.set(dot_col)
         self.sd_lbl.setText(dot_txt)

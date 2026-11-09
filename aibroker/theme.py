@@ -34,6 +34,7 @@ QLabel#muted { color: #868a91; font-size: 9.5pt; } QLabel#big { font-size: 10.5p
 QPushButton { background: #2b2d30; border: 1px solid #4e5157; border-radius: 4px; padding: 5px 14px; }
 QPushButton:hover { background: #393b40; } QPushButton:pressed { background: #43454a; } QPushButton:disabled { color: #6f737a; border-color: #393b40; }
 QPushButton#primary { background: #3574f0; border-color: #3574f0; color: white; } QPushButton#primary:hover { background: #4682fa; border-color: #4682fa; }
+QPushButton#danger { background: #c94f4f; border-color: #c94f4f; color: white; } QPushButton#danger:hover { background: #d96060; border-color: #d96060; }
 QPushButton#tool { padding: 3px 9px; font-size: 9.5pt; }
 QPushButton#tb, QPushButton#tbplay, QPushButton#tbpause { background: transparent; border: 1px solid transparent; border-radius: 4px; padding: 5px 11px; }
 QPushButton#tb:hover, QPushButton#tbplay:hover, QPushButton#tbpause:hover { background: #393b40; }
@@ -137,6 +138,7 @@ _SVG = {
     "check": '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
     "user": '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/>',
     "info": '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
+    "shield": '<path d="M12 3l8 3v6c0 4.4-3.2 7.6-8 9-4.8-1.4-8-4.6-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
     "alert": '<path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
     "list": '<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/>',
     "search": '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',

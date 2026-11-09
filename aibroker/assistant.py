@@ -17,7 +17,7 @@ MCP_JSON = paths.ROOT / "mcp.json"
 HISTORY = paths.HOME / "assistant_chat.json"
 
 BROKER = "mcp__ai-broker__"
-SAFE = [BROKER + n for n in ("queue_status", "resources", "job_status", "job_output", "job_history", "list_job_types", "get_limits", "submit_job", "rerun_job")] + [
+SAFE = [BROKER + n for n in ("queue_status", "resources", "job_status", "job_output", "job_history", "list_job_types", "get_limits", "hardware_profile", "submit_job", "rerun_job")] + [
     "Read", "Glob", "Grep", "WebSearch", "WebFetch",
     "Bash(nvidia-smi:*)", "Bash(dir:*)", "Bash(ls:*)", "Bash(du:*)", "Bash(where:*)",
     "Edit(docs/MODELS.md)", "Write(docs/MODELS.md)", "Edit(DOWNLOADS.md)", "Write(DOWNLOADS.md)"]
@@ -26,10 +26,10 @@ MODELS = {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "default":
 
 FRIENDLY = {
     BROKER + "queue_status": "בודק את התור", BROKER + "resources": "בודק את המשאבים", BROKER + "job_status": "בודק עבודה", BROKER + "job_output": "קורא את הפלט של עבודה",
-    BROKER + "job_history": "קורא את ההיסטוריה", BROKER + "list_job_types": "בודק אילו סוגי עבודות יש", BROKER + "get_limits": "בודק את המגבלות", BROKER + "submit_job": "שולח עבודה",
+    BROKER + "hardware_profile": "בודק את החומרה של המחשב", BROKER + "job_history": "קורא את ההיסטוריה", BROKER + "list_job_types": "בודק אילו סוגי עבודות יש", BROKER + "get_limits": "בודק את המגבלות", BROKER + "submit_job": "שולח עבודה",
     BROKER + "rerun_job": "מריץ עבודה שוב", BROKER + "cancel_job": "מבטל עבודה", BROKER + "move_job": "משנה סדר בתור", BROKER + "set_limits": "משנה מגבלות",
     BROKER + "pause_queue": "עוצר את התור", BROKER + "resume_queue": "ממשיך את התור", BROKER + "set_playing_mode": "משנה מצב ״אני משחק״",
-    "Read": "קורא קובץ", "Glob": "מחפש קבצים", "Grep": "מחפש בקבצים", "WebSearch": "מחפש באינטרנט", "WebFetch": "קורא דף אינטרנט", "Bash": "בודק את המחשב",
+    "Read": "קורא קובץ", "Glob": "מחפש קבצים", "Grep": "מחפש בקבצים", "WebSearch": "מחפש באינטרנט", "WebFetch": "קורא דף אינטרנט", "Bash": "בודק את המחשב", "PowerShell": "בודק את המחשב",
     "Edit": "מעדכן קובץ", "Write": "כותב קובץ"}
 
 
@@ -60,6 +60,26 @@ def allow_rule(d):
     return name
 
 
+def write_mcp_config(requester="claude (עוזר)"):
+    """The MCP config for ONE assistant turn: the broker's tools plus its permission handler (AIBROKER_ASSISTANT=1). Other agents never get the handler."""
+    try:
+        base = json.loads(MCP_JSON.read_text(encoding="utf-8"))
+        srv = base["mcpServers"]["ai-broker"]
+    except (OSError, ValueError, KeyError):
+        base = {"mcpServers": {"ai-broker": {"command": str(paths.VENV_PY), "args": [str(paths.ROOT / "mcp_launch.py")]}}}
+        srv = base["mcpServers"]["ai-broker"]
+    env = dict(srv.get("env") or {})
+    env.update(AIJOB_REQUESTER=requester, AIBROKER_ASSISTANT="1")
+    for k in ("AIBROKER_HOME", "AIBROKER_PORT"):              # tests run a separate broker: the handler must talk to the same one
+        if os.environ.get(k):
+            env[k] = os.environ[k]
+    srv["env"] = env
+    paths.HOME.mkdir(parents=True, exist_ok=True)
+    out = paths.HOME / "assistant_mcp.json"
+    out.write_text(json.dumps(base, ensure_ascii=False), encoding="utf-8")
+    return out
+
+
 class Worker(QtCore.QThread):
     """Runs ONE turn: `claude -p <message> --output-format stream-json ...` without any window, emits each stream event."""
     event = QtCore.Signal(dict)
@@ -77,7 +97,8 @@ class Worker(QtCore.QThread):
             self.proc.kill()
 
     def run(self):
-        cmd = [claude_exe(), "-p", self.message, "--output-format", "stream-json", "--verbose", "--mcp-config", str(MCP_JSON), "--strict-mcp-config",
+        cmd = [claude_exe(), "-p", self.message, "--output-format", "stream-json", "--verbose", "--mcp-config", str(write_mcp_config()), "--strict-mcp-config",
+               "--permission-prompt-tool", BROKER + "approve",
                "--append-system-prompt-file", str(PROMPT), "--add-dir", str(paths.ROOT / "output"), "--max-turns", "30",
                "--allowedTools", ",".join(SAFE + self.extra_allow)]
         if self.session:
