@@ -111,7 +111,8 @@ def learned_estimate(store, est_key, default):
 # ---------------------------------------------------------------- job types
 def load_types():
     types = {}
-    for d in (paths.TYPES_DIR, paths.USER_TYPES_DIR):
+    dirs = [paths.TYPES_DIR] + sorted(paths.ADAPTERS.glob("*/jobtypes")) + [paths.USER_TYPES_DIR]
+    for d in dirs:
         if d.is_dir():
             for f in sorted(d.glob("*.json")):
                 try:

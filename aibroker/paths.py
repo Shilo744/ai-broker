@@ -14,7 +14,8 @@ USER_TYPES_DIR = HOME / "jobtypes"          # same file format; overrides / exte
 VENV_PY = ROOT / ".venv" / "Scripts" / "python.exe"
 VENV_PYW = ROOT / ".venv" / "Scripts" / "pythonw.exe"
 
-GAMES = "C:/Migrated/Projects/Personal/Games"
+GAMES = "C:/Migrated/Projects/Personal/Games"          # only the default place of the shared legacy GPU lock
+ADAPTERS = ROOT / "adapters"
 DEFAULT_CONFIG = {
     "limits": {
         "ram_gb": 46.0,              # budget for the SUM of running jobs (physical RAM, working set)
@@ -42,12 +43,8 @@ DEFAULT_CONFIG = {
     "vars": {                         # {name} placeholders in jobtypes/*.json cmd templates
         "py_comfy": "C:/Migrated/AI/ComfyUI-Easy-Install/python_embeded/python.exe",
         "py_venv": str(VENV_PY).replace("\\", "/"),
-        "py_sys": "C:/Programs/Python312/python.exe",
         "blender": "C:/Programs/Blender/blender.exe",
-        "lab": GAMES + "/_lab",
-        "game": GAMES + "/agi_world",
         "runners": str(ROOT / "runners").replace("\\", "/"),
-        "tripo_pkgs": GAMES + "/agi_world/tools/shims;" + GAMES + "/agi_world/tools/pylib",
     },
 }
 
@@ -61,8 +58,21 @@ def _merge(base, over):
     return base
 
 
+def adapter_vars():
+    """vars.json of every adapter (project-specific paths); '{ROOT}' = this tool's folder."""
+    out = {}
+    for f in sorted(ADAPTERS.glob("*/vars.json")):
+        try:
+            for k, v in json.loads(f.read_text(encoding="utf-8")).items():
+                out[k] = v.replace("{ROOT}", str(ROOT).replace("\\", "/"))
+        except (OSError, ValueError):
+            pass
+    return out
+
+
 def load_config():
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
+    cfg["vars"].update(adapter_vars())
     try:
         _merge(cfg, json.loads(CONFIG.read_text(encoding="utf-8")))
     except (OSError, ValueError):

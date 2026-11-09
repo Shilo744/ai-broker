@@ -33,7 +33,7 @@
  },
  "cmd": [
   "{py_comfy}",
-  "{runners}/triposg_shape.py",
+  "{lab_runners}/triposg_shape.py",
   "--ref",
   "{ref}",
   "--out",

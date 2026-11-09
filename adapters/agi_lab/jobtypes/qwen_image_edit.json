@@ -36,7 +36,7 @@
  "cmd": [
   "{py_comfy}",
   "-I",
-  "{runners}/qwen_edit.py",
+  "{lab_runners}/qwen_edit.py",
   "--image",
   "{image}",
   "--image2",

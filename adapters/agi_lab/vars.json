@@ -1,0 +1,5 @@
+{
+ "lab": "C:/Migrated/Projects/Personal/Games/_lab",
+ "lab_runners": "{ROOT}/adapters/agi_lab/runners",
+ "tripo_pkgs": "C:/Migrated/Projects/Personal/Games/agi_world/tools/shims;C:/Migrated/Projects/Personal/Games/agi_world/tools/pylib"
+}
