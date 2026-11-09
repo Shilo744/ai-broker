@@ -64,5 +64,15 @@
   "out": "דגם תלת-ממדי גולמי: אפור, בלי צבע, וכבד (מאות אלפי משולשים) כי הוא עוד לא נוקה. אחרי העבודה נוצרת תצוגה שאפשר לסובב.",
   "example": "תמונה של צווארון פרווה על רקע ירוק",
   "tip": "הכנת הדגם למשחק (הקלה והדבקת פרטים) נעשית בשלבים הבאים: אפיית פרטים ועבודות Blender."
+ },
+ "en_title": "3D model from an image",
+ "en_group": "3D",
+ "en_desc": "Turns an image into a 3D shape (TripoSG)",
+ "en_about": {
+  "what": "A model that turns a picture of an object or a character into a 3D model (a GLB file) that you can rotate and use in a game.",
+  "inp": "One image of one object, from the front, on a green or transparent background",
+  "out": "A raw 3D model: grey, without colour, and heavy (hundreds of thousands of triangles) because it has not been cleaned yet. After the job a preview you can rotate is created.",
+  "example": "A picture of a fur collar on a green background",
+  "tip": "Preparing the model for the game (making it light and pasting the details) happens in the next steps: detail baking and Blender jobs."
  }
 }

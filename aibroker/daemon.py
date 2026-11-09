@@ -18,7 +18,8 @@ import traceback
 
 import psutil
 
-from . import hardware, paths, permissions, scheduler, store as st, winutil as wu
+from .i18n import T
+from . import hardware, i18n, paths, permissions, scheduler, store as st, winutil as wu
 
 TERMINAL = ("done", "failed", "cancelled", "lost")
 
@@ -57,6 +58,7 @@ class Broker:
         paths.HOME.mkdir(parents=True, exist_ok=True)
         paths.LOGS.mkdir(parents=True, exist_ok=True)
         self.cfg = paths.load_config()
+        i18n.set_lang(self.cfg.get("lang", "he"))
         self.store = st.Store()
         self.types = st.load_types()
         self.live = {}
@@ -297,7 +299,7 @@ class Broker:
                     return [fix(x) for x in v]
                 return v
             params = {k: fix(v) for k, v in (j["params"] or {}).items()}
-            req = dict(type=j["type"], params=params, name=(j["name"] + " (שוב)") if "(שוב)" not in j["name"] else j["name"], requester=requester or "owner", model=j["model"])
+            req = dict(type=j["type"], params=params, name=(j["name"] + T(" (שוב)")) if "(שוב)" not in j["name"] else j["name"], requester=requester or "owner", model=j["model"])
             if j["type"] == "custom":
                 req["cmd"] = params.pop("extra", None) or [fix(x) for x in j["cmd"]]
             if str(j["est_source"]).startswith("given"):
@@ -595,7 +597,7 @@ class Broker:
             e = dict(id=self.perm_n, ts=now, polled=now, tool=tool, text=v.text, risk=v.risk, kind=v.kind, why=v.why, detail=(v.detail or "")[:3000], shell=v.shell,
                      level=level, state={"allow": "allow", "deny": "deny", "ask": "pending"}[decision], message="")
             if decision == "deny":
-                e["message"] = "חסום תמיד: %s. %s" % (v.text, v.why)
+                e["message"] = T("חסום תמיד: %s. %s") % (v.text, v.why)
             for k in [k for k, x in self.perms.items() if now - x["ts"] > 3600]:
                 del self.perms[k]
             self.perms[e["id"]] = e
@@ -616,7 +618,7 @@ class Broker:
             if not e or e["state"] != "pending":
                 return dict(ok=False, error="request is not waiting")
             e["state"] = "allow" if allow else "deny"
-            e["message"] = "" if allow else (message or "המשתמש דחה את הפעולה. הצע חלופה או המשך בלי זה.")
+            e["message"] = "" if allow else (message or T("המשתמש דחה את הפעולה. הצע חלופה או המשך בלי זה."))
         self.log("owner %s: %s" % ("allowed" if allow else "declined", e["text"]))
         return dict(ok=True)
 
@@ -718,6 +720,13 @@ class Broker:
                 self.save_cfg()
                 self.log("assistant permission level -> %s" % req["set"])
             return dict(ok=True, level=c.get("assistant_level", permissions.DEFAULT_LEVEL))
+        if op == "lang":
+            if req.get("set") in ("he", "en"):
+                c["lang"] = req["set"]
+                i18n.set_lang(req["set"])
+                self.save_cfg()
+                self.log("language -> %s" % req["set"])
+            return dict(ok=True, lang=c.get("lang", "he"))
         if op == "perm_ask":
             return self.perm_ask(req)
         if op == "perm_get":

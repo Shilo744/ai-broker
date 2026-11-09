@@ -9,6 +9,7 @@ risk:  safe     only reads information
        blocked  never allowed at any level (formatting disks, registry/security changes, the owner's Claude settings, remote code ...)
 """
 import json
+from .i18n import T
 import re
 from dataclasses import dataclass, field
 
@@ -156,41 +157,41 @@ def _describe_shell(cmd, desc, kind):
     low = cmd.lower()
     parts = []
     if re.search(r"get-psdrive|get-volume|logicaldisk|diskfree|freespace|\bdf\b|get-disk|get-partition", low):
-        parts.append("בודק כמה מקום פנוי יש בדיסקים")
+        parts.append(T("בודק כמה מקום פנוי יש בדיסקים"))
     if re.search(r"nvidia-smi|videocontroller|get-pnpdevice", low):
-        parts.append("בודק את כרטיס המסך והזיכרון שלו")
+        parts.append(T("בודק את כרטיס המסך והזיכרון שלו"))
     if re.search(r"win32_(computersystem|processor|physicalmemory|operatingsystem)|systeminfo|get-computerinfo|get-ciminstance|get-wmiobject|gwmi", low) and not parts:
-        parts.append("בודק את החומרה של המחשב")
+        parts.append(T("בודק את החומרה של המחשב"))
     if re.search(r"get-process|tasklist|\bgps\b", low):
-        parts.append("בודק אילו תוכנות רצות")
+        parts.append(T("בודק אילו תוכנות רצות"))
     if re.search(r"get-childitem|\bgci\b|\bdir\b|(^|[\s;|])ls\b|\bfind\b|\btree\b|get-item\b", low):
         p = _first_path(cmd)
-        parts.append("מציג רשימת קבצים" + (" בתיקייה %s" % p if p else ""))
+        parts.append(T("מציג רשימת קבצים") + (T(" בתיקייה %s") % p if p else ""))
     if re.search(r"get-content|\btype\b|\bcat\b|\bgc\b|select-string|\bgrep\b|\brg\b|\bhead\b|\btail\b", low):
-        parts.append("קורא קובץ")
+        parts.append(T("קורא קובץ"))
     if re.search(r"pip3?\s+(list|show|freeze)|python3?\s+(-v|--version)|\bpy\s+-", low):
-        parts.append("בודק את סביבת Python")
+        parts.append(T("בודק את סביבת Python"))
     if re.search(r"git\s+(status|log|diff|branch|show)", low):
-        parts.append("בודק את מצב ה-git")
+        parts.append(T("בודק את מצב ה-git"))
     if kind == "download":
         host, name = _target(cmd)
-        parts.append("מוריד קובץ מהאינטרנט" + (" (%s מ-%s)" % (name, host) if host and name else (" מ-%s" % host if host else "")))
+        parts.append(T("מוריד קובץ מהאינטרנט") + (T(" (%s מ-%s)") % (name, host) if host and name else (T(" מ-%s") % host if host else "")))
     if kind == "install":
         m = re.search(r"(?:pip3?|python3?\s+-m\s+pip)\s+install\s+([^\s;|&]+)", cmd, re.I) or re.search(r"(?:winget|choco|scoop|conda)\s+install\s+([^\s;|&]+)", cmd, re.I) or re.search(r"npm\s+(?:i|install)\s+([^\s;|&]+)", cmd, re.I)
-        parts.append("מתקין תוכנה" + (" (%s)" % m.group(1) if m else ""))
+        parts.append(T("מתקין תוכנה") + (" (%s)" % m.group(1) if m else ""))
     if kind == "delete":
         p = _first_path(cmd)
-        parts.append("מוחק קבצים" + (" (%s)" % p if p else ""))
+        parts.append(T("מוחק קבצים") + (" (%s)" % p if p else ""))
     if kind == "write" and not parts:
         p = _first_path(cmd)
-        parts.append("יוצר או משנה קבצים" + (" (%s)" % p if p else ""))
+        parts.append(T("יוצר או משנה קבצים") + (" (%s)" % p if p else ""))
     if kind == "run" and not parts:
-        parts.append("מריץ תוכנה או סקריפט")
+        parts.append(T("מריץ תוכנה או סקריפט"))
     if kind == "system" and not parts:
-        parts.append("עוצר תוכנה או משנה משהו במערכת")
+        parts.append(T("עוצר תוכנה או משנה משהו במערכת"))
     if not parts:
-        parts.append("מריץ פקודה במחשב")
-    return " ו".join(dict.fromkeys(parts))
+        parts.append(T("מריץ פקודה במחשב"))
+    return T(" ו").join(dict.fromkeys(parts))
 
 
 def analyze_shell(cmd, desc=""):
@@ -198,24 +199,24 @@ def analyze_shell(cmd, desc=""):
     low = cmd.lower()
     for rx, what in BLOCKED:
         if re.search(rx, low, re.I | re.S):
-            return Verdict("blocked", "system", "פעולה מסוכנת במיוחד: %s" % what, cmd, True, "הפעולה הזאת חסומה בכל רמות ההרשאה.")
+            return Verdict("blocked", "system", T("פעולה מסוכנת במיוחד: %s") % T(what), cmd, True, T("הפעולה הזאת חסומה בכל רמות ההרשאה."))
     if DELETE.search(cmd):
         if SYSTEM_PATH.search(cmd) or DRIVE_ROOT.search(cmd) or USER_ROOT.search(cmd):
-            return Verdict("blocked", "delete", "מחיקה של תיקיית מערכת, משתמש או דיסק שלם", cmd, True, "הפעולה הזאת חסומה בכל רמות ההרשאה.")
-        return Verdict("danger", "delete", _describe_shell(cmd, desc, "delete"), cmd, True, KIND_WHY["delete"])
+            return Verdict("blocked", "delete", T("מחיקה של תיקיית מערכת, משתמש או דיסק שלם"), cmd, True, T("הפעולה הזאת חסומה בכל רמות ההרשאה."))
+        return Verdict("danger", "delete", _describe_shell(cmd, desc, "delete"), cmd, True, T(KIND_WHY["delete"]))
     if KILL.search(cmd):
-        return Verdict("danger", "system", _describe_shell(cmd, desc, "system"), cmd, True, KIND_WHY["system"])
+        return Verdict("danger", "system", _describe_shell(cmd, desc, "system"), cmd, True, T(KIND_WHY["system"]))
     if DOWNLOAD.search(cmd):
-        return Verdict("change", "download", _describe_shell(cmd, desc, "download"), cmd, True, KIND_WHY["download"])
+        return Verdict("change", "download", _describe_shell(cmd, desc, "download"), cmd, True, T(KIND_WHY["download"]))
     if INSTALL.search(cmd):
-        return Verdict("change", "install", _describe_shell(cmd, desc, "install"), cmd, True, KIND_WHY["install"])
+        return Verdict("change", "install", _describe_shell(cmd, desc, "install"), cmd, True, T(KIND_WHY["install"]))
     if WRITE.search(re.sub(r"\d?>>?\s*(\$null|nul|&\d)", " ", cmd, flags=re.I)):
-        return Verdict("change", "write", _describe_shell(cmd, desc, "write"), cmd, True, KIND_WHY["write"])
+        return Verdict("change", "write", _describe_shell(cmd, desc, "write"), cmd, True, T(KIND_WHY["write"]))
     if RUN_HARD.search(cmd) or (RUN.search(cmd) and not _is_read_only(cmd)):
-        return Verdict("change", "run", _describe_shell(cmd, desc, "run"), cmd, True, KIND_WHY["run"])
+        return Verdict("change", "run", _describe_shell(cmd, desc, "run"), cmd, True, T(KIND_WHY["run"]))
     if _is_read_only(cmd):
         return Verdict("safe", "read", _describe_shell(cmd, desc, "read"), cmd, True)
-    return Verdict("change", "run", _describe_shell(cmd, desc, "run"), cmd, True, KIND_WHY["run"])
+    return Verdict("change", "run", _describe_shell(cmd, desc, "run"), cmd, True, T(KIND_WHY["run"]))
 
 
 # ---------------------------------------------------------------- every other tool
@@ -237,28 +238,28 @@ def analyze(tool, tin):
     if tool in ("Bash", "PowerShell"):
         return analyze_shell(str(tin.get("command", "")), str(tin.get("description", "") or ""))
     if tool in ("Read", "Glob", "Grep", "NotebookRead", "LS"):
-        what = {"Read": "קורא קובץ", "Glob": "מחפש קבצים", "Grep": "מחפש בתוך קבצים"}.get(tool, "קורא קבצים")
+        what = {"Read": T("קורא קובץ"), "Glob": T("מחפש קבצים"), "Grep": T("מחפש בתוך קבצים")}.get(tool, T("קורא קבצים"))
         p = tin.get("file_path") or tin.get("path") or tin.get("pattern") or ""
         return Verdict("safe", "read", what + (": %s" % p if p else ""), str(p))
     if tool in ("WebSearch", "WebFetch"):
         q = tin.get("query") or tin.get("url") or ""
-        return Verdict("safe", "read", ("מחפש באינטרנט" if tool == "WebSearch" else "קורא דף אינטרנט") + (": %s" % q if q else ""), str(q))
+        return Verdict("safe", "read", (T("מחפש באינטרנט") if tool == "WebSearch" else T("קורא דף אינטרנט")) + (": %s" % q if q else ""), str(q))
     if tool in ("Edit", "Write", "NotebookEdit", "MultiEdit"):
         p = str(tin.get("file_path") or tin.get("notebook_path") or "")
         if PROTECTED_FILE.search(p):
-            return Verdict("blocked", "write", "שינוי קובץ מערכת או הגדרות של Claude: %s" % p, p, False, "הפעולה הזאת חסומה בכל רמות ההרשאה.")
-        return Verdict("change", "write", "כותב קובץ: %s" % p if p else "כותב קובץ", p, False, KIND_WHY["write"])
+            return Verdict("blocked", "write", T("שינוי קובץ מערכת או הגדרות של Claude: %s") % p, p, False, T("הפעולה הזאת חסומה בכל רמות ההרשאה."))
+        return Verdict("change", "write", T("כותב קובץ: %s") % p if p else T("כותב קובץ"), p, False, T(KIND_WHY["write"]))
     if tool.startswith(BROKER):
         name = tool[len(BROKER):]
-        txt = BROKER_TEXT.get(name, name)
+        txt = T(BROKER_TEXT.get(name, name))
         det = json.dumps(tin, ensure_ascii=False)[:300] if tin else ""
         if name in BROKER_READ:
             return Verdict("safe", "read", txt, det)
         if name in BROKER_RUN:
-            return Verdict("change", "run", txt, det, False, "")
-        return Verdict("change", "tool", txt, det, False, KIND_WHY["tool"])
+            return Verdict("change", "run", txt, det, False, "", ["broker-run"])
+        return Verdict("change", "tool", txt, det, False, T(KIND_WHY["tool"]))
     det = json.dumps(tin, ensure_ascii=False)[:300] if tin else ""
-    return Verdict("change", "tool", "משתמש בכלי ״%s״" % tool, det, False, KIND_WHY["tool"])
+    return Verdict("change", "tool", T("משתמש בכלי ״%s״") % tool, det, False, T(KIND_WHY["tool"]))
 
 
 def decide(level, v):
@@ -280,7 +281,7 @@ def decide(level, v):
     if level == "normal":
         if v.risk == "safe":
             return "allow"
-        if v.kind == "run" and not v.shell and v.tags == []:
-            return "allow" if v.text in (BROKER_TEXT["submit_job"], BROKER_TEXT["rerun_job"]) else "ask"
+        if "broker-run" in v.tags:                       # submit_job / rerun_job: the main purpose of the program
+            return "allow"
         return "ask"
     return "allow"                  # free: everything except danger (above) and blocked

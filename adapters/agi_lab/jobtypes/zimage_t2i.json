@@ -63,5 +63,15 @@
   "out": "תמונה",
   "example": "A weathered street courier in a rain jacket, studio light, full body",
   "tip": "תיאור מפורט (מי, מה לובש, תאורה, רקע) נותן תוצאה טובה יותר מתיאור קצר."
+ },
+ "en_title": "Text to image",
+ "en_group": "Images",
+ "en_desc": "Draws a new image from a description in words",
+ "en_about": {
+  "what": "A model that draws a new image from a description in words, without a source image.",
+  "inp": "A description in English",
+  "out": "An image",
+  "example": "A weathered street courier in a rain jacket, studio light, full body",
+  "tip": "A detailed description (who, what they wear, lighting, background) gives a better result than a short one."
  }
 }

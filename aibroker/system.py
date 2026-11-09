@@ -5,6 +5,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from .i18n import T
 from . import paths, winutil
 
 STARTUP_DIR = Path(os.environ.get("APPDATA", str(Path.home()))) / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "Startup"
@@ -65,7 +66,7 @@ def register_claude():
             return False, (r.stderr or r.stdout or "claude mcp add failed")[-300:]
         SKILL_DST.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(SKILL_SRC, SKILL_DST, dirs_exist_ok=True)
-        return True, "מחובר. סשנים חדשים של Claude Code יראו את הכלים של ה-broker."
+        return True, T("מחובר. סשנים חדשים של Claude Code יראו את הכלים של ה-broker.")
     except (OSError, subprocess.TimeoutExpired) as e:
         return False, repr(e)
 
@@ -75,6 +76,6 @@ def unregister_claude():
         subprocess.run([_claude(), "mcp", "remove", "ai-broker", "--scope", "user"], capture_output=True, text=True, timeout=60, creationflags=winutil.NO_WINDOW)
         if SKILL_DST.exists():
             shutil.rmtree(SKILL_DST, ignore_errors=True)
-        return True, "נותק."
+        return True, T("נותק.")
     except (OSError, subprocess.TimeoutExpired) as e:
         return False, repr(e)

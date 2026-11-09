@@ -6,6 +6,7 @@ from collections import deque
 from PySide6 import QtCore, QtGui, QtWidgets as W
 from PySide6.QtCore import Qt
 
+from .i18n import T
 from .theme import ACCENT, BAD, BG, BORDER, LINE, MUTED, OK, PANEL, SELECT, SUB, TEXT, WARN, icon, icon_pixmap
 
 ROLE_KIND = Qt.UserRole + 1       # "item" | "caption" | "sep"
@@ -155,7 +156,7 @@ class Gauge(W.QWidget):
 
     def set(self, used, total, num_text, marker=None):
         f = max(0.0, min(1.0, used / total if total else 0))
-        color, word = (OK, "") if f < 0.6 else (WARN, "עמוס") if f < 0.85 else (BAD, "כמעט מלא")
+        color, word = (OK, "") if f < 0.6 else (WARN, T("עמוס")) if f < 0.85 else (BAD, T("כמעט מלא"))
         self.word.setText(word)
         self.word.setStyleSheet("font-weight:600; font-size:9pt; color:%s;" % color)
         self.num.setText(num_text)
@@ -312,7 +313,7 @@ class NoticeBar(W.QFrame):
         row.act = W.QPushButton()
         row.act.setObjectName("flat")
         row.act.setCursor(Qt.PointingHandCursor)
-        row.close_btn = tool_button("x", "סגור", None, size=13)
+        row.close_btn = tool_button("x", T("סגור"), None, size=13)
         h.addWidget(row.ic)
         h.addWidget(row.msg, 1)
         h.addWidget(row.act)
@@ -487,7 +488,7 @@ class TaskWidget(W.QFrame):
         h = W.QHBoxLayout(self)
         h.setContentsMargins(8, 0, 8, 0)
         h.setSpacing(8)
-        self.lbl = W.QLabel("אין עבודות פעילות")
+        self.lbl = W.QLabel(T("אין עבודות פעילות"))
         self.lbl.setObjectName("muted")
         self.bar = W.QProgressBar()
         self.bar.setFixedWidth(96)
@@ -500,7 +501,7 @@ class TaskWidget(W.QFrame):
     def set_job(self, j, extra=0):
         self.job = j
         if not j:
-            self.lbl.setText("אין עבודות פעילות")
+            self.lbl.setText(T("אין עבודות פעילות"))
             self.bar.setVisible(False)
             return
         name = j["name"] if len(j["name"]) < 26 else j["name"][:24] + "…"
@@ -509,11 +510,11 @@ class TaskWidget(W.QFrame):
         el = j.get("elapsed", 0)
         if typ and j.get("state") == "running":
             left = max(0, typ - el)
-            self.lbl.setText("%s%s  •  נשארו כ-%d שנ'" % (name, more, round(left)))
+            self.lbl.setText(T("%s%s  •  נשארו כ-%d שנ'") % (name, more, round(left)))
             self.bar.setRange(0, 100)
             self.bar.setValue(min(95, int(100 * el / typ)))
         else:
-            self.lbl.setText("%s%s  •  %d שנ'" % (name, more, el))
+            self.lbl.setText(T("%s%s  •  %d שנ'") % (name, more, el))
             self.bar.setRange(0, 0)
         self.bar.setVisible(True)
 
@@ -539,7 +540,7 @@ class Palette(W.QDialog):
         v.setContentsMargins(0, 0, 0, 6)
         v.setSpacing(0)
         self.edit = W.QLineEdit()
-        self.edit.setPlaceholderText("חפש מודל או פעולה…")
+        self.edit.setPlaceholderText(T("חפש מודל או פעולה…"))
         self.edit.textChanged.connect(self.refilter)
         self.edit.installEventFilter(self)
         v.addWidget(self.edit)
@@ -548,7 +549,7 @@ class Palette(W.QDialog):
         self.list.itemActivated.connect(self.run_item)
         self.list.itemClicked.connect(self.run_item)
         v.addWidget(self.list)
-        foot = W.QLabel("↑↓ לבחירה   Enter להפעלה   Esc לסגירה")
+        foot = W.QLabel(T("↑↓ לבחירה   Enter להפעלה   Esc לסגירה"))
         foot.setObjectName("muted")
         foot.setContentsMargins(12, 6, 12, 0)
         v.addWidget(foot)

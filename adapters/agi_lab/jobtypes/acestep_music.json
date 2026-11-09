@@ -38,5 +38,14 @@
   "inp": "אורך בשניות",
   "out": "קובצי שמע (FLAC)",
   "tip": "להאזנה לוחצים על הקובץ והוא נפתח בנגן שלך."
+ },
+ "en_title": "Create music",
+ "en_group": "Audio",
+ "en_desc": "Composes music (ACE-Step)",
+ "en_about": {
+  "what": "Composes background music without vocals, for example for a city at night or tense moments. For now it runs a ready-made list of tracks from the lab.",
+  "inp": "Length in seconds",
+  "out": "Audio files (FLAC)",
+  "tip": "To listen, click the file and it opens in your player."
  }
 }

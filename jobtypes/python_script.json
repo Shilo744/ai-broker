@@ -34,5 +34,14 @@
   "inp": "קובץ סקריפט",
   "out": "מה שהסקריפט שומר",
   "tip": "לשימוש מתקדם."
+ },
+ "en_title": "Python script",
+ "en_group": "Other",
+ "en_desc": "Runs any script",
+ "en_about": {
+  "what": "Runs any Python script through the queue, with the ComfyUI environment.",
+  "inp": "A script file",
+  "out": "Whatever the script saves",
+  "tip": "For advanced use."
  }
 }

@@ -78,5 +78,15 @@
   "out": "תמונה חדשה: אותה תמונה אחרי השינוי",
   "example": "Change the black coat to dark red. Keep everything else identical.",
   "tip": "אחרי שיש תוצאה אפשר להמשיך לדבר: ההודעה הבאה עורכת את התוצאה האחרונה."
+ },
+ "en_title": "Edit an image",
+ "en_group": "Images",
+ "en_desc": "Changes an existing image from a written instruction",
+ "en_about": {
+  "what": "A model that changes an existing image from an instruction you write in words. You can change the colour of clothing, replace the background, add or remove an object.",
+  "inp": "An image, and an instruction in English",
+  "out": "A new image: the same image after the change",
+  "example": "Change the black coat to dark red. Keep everything else identical.",
+  "tip": "Once there is a result you can keep talking: the next message edits the latest result."
  }
 }

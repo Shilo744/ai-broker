@@ -40,5 +40,14 @@
   "inp": "שם של תרחיש ומשך בשניות",
   "out": "סרטון (MP4)",
   "tip": "משתמש בכרטיס המסך, לכן מחכה כשאתה משחק או מקליט."
+ },
+ "en_title": "A video from the game",
+ "en_group": "Game",
+ "en_desc": "Films a short video from the game",
+ "en_about": {
+  "what": "Like the screenshots, but films a short video from the game.",
+  "inp": "A scenario name and a length in seconds",
+  "out": "A video (MP4)",
+  "tip": "Uses the graphics card, so it waits while you play or record."
  }
 }

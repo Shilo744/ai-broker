@@ -42,5 +42,14 @@
   "inp": "קובץ סקריפט, ובדרך כלל גם הדגם שהוא עובד עליו",
   "out": "מה שהסקריפט שומר בתיקיית התוצאה",
   "tip": "לשימוש מתקדם. בדרך כלל Claude מפעיל את זה."
+ },
+ "en_title": "Blender job",
+ "en_group": "3D",
+ "en_desc": "Runs a script in Blender",
+ "en_about": {
+  "what": "Runs a script in Blender in the background, without opening it. For example reducing a model's triangle count, cleaning it or exporting it.",
+  "inp": "A script file, and usually the model it works on",
+  "out": "Whatever the script saves in the result folder",
+  "tip": "For advanced use. Usually Claude starts this."
  }
 }

@@ -35,5 +35,14 @@
   "inp": "שם של תרחיש בדיקה",
   "out": "דוח תוצאות",
   "tip": "מהיר וקל, ולא משתמש בכרטיס המסך."
+ },
+ "en_title": "Game test without a screen",
+ "en_group": "Game",
+ "en_desc": "A light test of the game's logic",
+ "en_about": {
+  "what": "Runs the game without a window and without graphics to check that its logic works: automatic scenarios that pass or fail.",
+  "inp": "A test scenario name",
+  "out": "A results report",
+  "tip": "Fast and light, and does not use the graphics card."
  }
 }

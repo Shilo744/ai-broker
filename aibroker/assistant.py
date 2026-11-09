@@ -10,7 +10,8 @@ import time
 
 from PySide6 import QtCore
 
-from . import paths, winutil
+from .i18n import T
+from . import i18n, paths, winutil
 
 PROMPT = paths.ROOT / "skill" / "ai-broker" / "AGENT_PROMPT.md"
 MCP_JSON = paths.ROOT / "mcp.json"
@@ -25,12 +26,12 @@ SAFE = [BROKER + n for n in ("queue_status", "resources", "job_status", "job_out
 MODELS = {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "default": None}
 
 FRIENDLY = {
-    BROKER + "queue_status": "בודק את התור", BROKER + "resources": "בודק את המשאבים", BROKER + "job_status": "בודק עבודה", BROKER + "job_output": "קורא את הפלט של עבודה",
-    BROKER + "hardware_profile": "בודק את החומרה של המחשב", BROKER + "job_history": "קורא את ההיסטוריה", BROKER + "list_job_types": "בודק אילו סוגי עבודות יש", BROKER + "get_limits": "בודק את המגבלות", BROKER + "submit_job": "שולח עבודה",
-    BROKER + "rerun_job": "מריץ עבודה שוב", BROKER + "cancel_job": "מבטל עבודה", BROKER + "move_job": "משנה סדר בתור", BROKER + "set_limits": "משנה מגבלות",
-    BROKER + "pause_queue": "עוצר את התור", BROKER + "resume_queue": "ממשיך את התור", BROKER + "set_playing_mode": "משנה מצב ״אני משחק״",
-    "Read": "קורא קובץ", "Glob": "מחפש קבצים", "Grep": "מחפש בקבצים", "WebSearch": "מחפש באינטרנט", "WebFetch": "קורא דף אינטרנט", "Bash": "בודק את המחשב", "PowerShell": "בודק את המחשב",
-    "Edit": "מעדכן קובץ", "Write": "כותב קובץ"}
+    BROKER + "queue_status": T("בודק את התור"), BROKER + "resources": T("בודק את המשאבים"), BROKER + "job_status": T("בודק עבודה"), BROKER + "job_output": T("קורא את הפלט של עבודה"),
+    BROKER + "hardware_profile": T("בודק את החומרה של המחשב"), BROKER + "job_history": T("קורא את ההיסטוריה"), BROKER + "list_job_types": T("בודק אילו סוגי עבודות יש"), BROKER + "get_limits": T("בודק את המגבלות"), BROKER + "submit_job": T("שולח עבודה"),
+    BROKER + "rerun_job": T("מריץ עבודה שוב"), BROKER + "cancel_job": T("מבטל עבודה"), BROKER + "move_job": T("משנה סדר בתור"), BROKER + "set_limits": T("משנה מגבלות"),
+    BROKER + "pause_queue": T("עוצר את התור"), BROKER + "resume_queue": T("ממשיך את התור"), BROKER + "set_playing_mode": T("משנה מצב ״אני משחק״"),
+    "Read": T("קורא קובץ"), "Glob": T("מחפש קבצים"), "Grep": T("מחפש בקבצים"), "WebSearch": T("מחפש באינטרנט"), "WebFetch": T("קורא דף אינטרנט"), "Bash": T("בודק את המחשב"), "PowerShell": T("בודק את המחשב"),
+    "Edit": T("מעדכן קובץ"), "Write": T("כותב קובץ")}
 
 
 def claude_exe():
@@ -42,7 +43,7 @@ def describe_denial(d):
     name = d.get("tool_name", "")
     inp = d.get("tool_input") or {}
     if name == "Bash":
-        return "להריץ בפקודה: " + str(inp.get("command", ""))[:300]
+        return T("להריץ בפקודה: ") + str(inp.get("command", ""))[:300]
     if name.startswith(BROKER):
         return FRIENDLY.get(name, name) + (" (%s)" % json.dumps(inp, ensure_ascii=False)[:160] if inp else "")
     if name in ("Edit", "Write"):
@@ -60,7 +61,7 @@ def allow_rule(d):
     return name
 
 
-def write_mcp_config(requester="claude (עוזר)"):
+def write_mcp_config(requester=T("claude (עוזר)")):
     """The MCP config for ONE assistant turn: the broker's tools plus its permission handler (AIBROKER_ASSISTANT=1). Other agents never get the handler."""
     try:
         base = json.loads(MCP_JSON.read_text(encoding="utf-8"))
@@ -77,6 +78,19 @@ def write_mcp_config(requester="claude (עוזר)"):
     paths.HOME.mkdir(parents=True, exist_ok=True)
     out = paths.HOME / "assistant_mcp.json"
     out.write_text(json.dumps(base, ensure_ascii=False), encoding="utf-8")
+    return out
+
+
+def write_prompt():
+    """The assistant's instructions plus the language of the window: the owner reads the answers, so Claude answers in the language he chose."""
+    base = PROMPT.read_text(encoding="utf-8")
+    if i18n.lang() == "en":
+        base = base.replace("Speak to the owner in short, plain Hebrew", "Speak to the owner in short, plain English")
+        base += ("\n\nLanguage: the owner chose English for this program. Answer in English. Write the `description` argument of every Bash / PowerShell call "
+                 "in plain English (one short sentence), not in Hebrew.\n")
+    paths.HOME.mkdir(parents=True, exist_ok=True)
+    out = paths.HOME / "assistant_prompt.md"
+    out.write_text(base, encoding="utf-8")
     return out
 
 
@@ -99,7 +113,7 @@ class Worker(QtCore.QThread):
     def run(self):
         cmd = [claude_exe(), "-p", self.message, "--output-format", "stream-json", "--verbose", "--mcp-config", str(write_mcp_config()), "--strict-mcp-config",
                "--permission-prompt-tool", BROKER + "approve",
-               "--append-system-prompt-file", str(PROMPT), "--add-dir", str(paths.ROOT / "output"), "--max-turns", "30",
+               "--append-system-prompt-file", str(write_prompt()), "--add-dir", str(paths.ROOT / "output"), "--max-turns", "30",
                "--allowedTools", ",".join(SAFE + self.extra_allow)]
         if self.session:
             cmd += ["--resume", self.session]
@@ -108,7 +122,7 @@ class Worker(QtCore.QThread):
             cmd += ["--model", mid]
         result = {"ok": False, "error": "", "session": self.session, "denials": [], "text": ""}
         try:
-            env = dict(os.environ, AIJOB_REQUESTER="claude (עוזר)", PYTHONUTF8="1")
+            env = dict(os.environ, AIJOB_REQUESTER=T("claude (עוזר)"), PYTHONUTF8="1")
             self.proc = subprocess.Popen(cmd, cwd=str(paths.ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env,
                                          creationflags=winutil.NO_WINDOW, encoding="utf-8", errors="replace")
             t0 = time.time()
@@ -129,7 +143,7 @@ class Worker(QtCore.QThread):
                 self.event.emit(ev)
                 if time.time() - t0 > 900:
                     self.proc.kill()
-                    result["error"] = "הלך יותר מדי זמן"
+                    result["error"] = T("הלך יותר מדי זמן")
                     break
             self.proc.wait(timeout=10)
             if not result["ok"] and not result["error"]:

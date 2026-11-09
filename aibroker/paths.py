@@ -40,6 +40,8 @@ DEFAULT_CONFIG = {
     "respect_gpu_lock": True,
     "gpu_lock_path": GAMES + "/Assets/3D maker/characters/.gpu.lock",
     "toast": False,
+    "lang": "he",                    # UI language: "he" (right-to-left, default) or "en"
+    "assistant_level": "normal",     # what the in-window Claude may do without asking: careful / normal / free
     "history_keep": 500,
     "auto_preview": True,            # after a job that wrote .glb files, queue a turntable preview job for each
     "output_root": str(ROOT / "output").replace("\\", "/"),   # every model type gets its own folder under here

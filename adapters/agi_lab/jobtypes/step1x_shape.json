@@ -45,5 +45,14 @@
   "inp": "קובץ רשימה (jobs.json) עם התמונות והשמות",
   "out": "דגמים תלת-ממדיים גולמיים",
   "tip": "בדרך כלל Claude או סוכן המעבדה מפעילים אותו. אין צורך להפעיל אותו ידנית."
+ },
+ "en_title": "3D model, second model",
+ "en_group": "3D",
+ "en_desc": "The same with another model, for comparison (Step1X)",
+ "en_about": {
+  "what": "A second model for the same purpose as TripoSG: image to 3D model. Used when the first one did not succeed, or to compare two models.",
+  "inp": "A list file (jobs.json) with the images and the names",
+  "out": "Raw 3D models",
+  "tip": "Usually Claude or the lab agent starts it. There is no need to start it by hand."
  }
 }

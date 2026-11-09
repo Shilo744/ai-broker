@@ -22,5 +22,13 @@
   "what": "כל תוכנה שאפשר להריץ בפקודה. אתה מציין כמה RAM היא צריכה, והתור דואג שהיא לא תתנגש עם העבודות האחרות.",
   "inp": "פקודה",
   "out": "מה שהתוכנה שומרת"
+ },
+ "en_title": "Another command",
+ "en_group": "Other",
+ "en_desc": "Any program you write a command for",
+ "en_about": {
+  "what": "Any program that can be run with a command. You say how much RAM it needs, and the queue makes sure it does not collide with the other jobs.",
+  "inp": "A command",
+  "out": "Whatever the program saves"
  }
 }

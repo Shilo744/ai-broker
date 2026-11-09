@@ -41,5 +41,14 @@
   "inp": "שם של תרחיש",
   "out": "תמונות מסך",
   "tip": "משתמש בכרטיס המסך, לכן מחכה כשאתה משחק או מקליט."
+ },
+ "en_title": "Screenshots from the game",
+ "en_group": "Game",
+ "en_desc": "Runs the game in the background and takes pictures",
+ "en_about": {
+  "what": "Runs the game in the background (on a hidden desktop, without disturbing you) and takes pictures of a scenario, to see how it looks without opening the game.",
+  "inp": "A scenario name",
+  "out": "Screenshots",
+  "tip": "Uses the graphics card, so it waits while you play or record."
  }
 }

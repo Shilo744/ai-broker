@@ -36,5 +36,14 @@
   "inp": "קובץ סקריפט",
   "out": "קובצי שמע",
   "tip": "משמש בעיקר את סוכן המעבדה."
+ },
+ "en_title": "Create sounds",
+ "en_group": "Audio",
+ "en_desc": "Effects and voices (MOSS)",
+ "en_about": {
+  "what": "A sound model that makes effects and voices from a script.",
+  "inp": "Script file",
+  "out": "Audio files",
+  "tip": "Used mostly by the lab agent."
  }
 }

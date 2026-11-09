@@ -41,5 +41,8 @@
  "he_desc": "נוצרת אוטומטית אחרי עבודת תלת-ממד",
  "he_group": "אחר",
  "icon": "🧊",
- "color": "#2aa198"
+ "color": "#2aa198",
+ "en_title": "3D preview",
+ "en_group": "Other",
+ "en_desc": "Created automatically after a 3D job"
 }
