@@ -483,7 +483,7 @@ class Main(W.QMainWindow):
         super().__init__()
         self.setWindowTitle("מנהל העבודות של ה-AI")
         self.setWindowIcon(make_icon())
-        self.resize(1280, 880)
+        self.resize(1180, 780)
         self.state = None
         self.types = {}
         self.hist_rev = -1
@@ -562,6 +562,11 @@ class Main(W.QMainWindow):
             nav.addWidget(b)
             self.navs.append(b)
         nav.addStretch(1)
+        sw = W.QPushButton("🖥️  תצוגה כהה")
+        sw.setToolTip("לעבור לתצוגה הכהה והמקצועית")
+        sw.setCursor(Qt.PointingHandCursor)
+        sw.clicked.connect(self.switch_view)
+        nav.addWidget(sw)
         v.addLayout(nav)
         v.addWidget(self.stack, 1)
         self.stack.addWidget(self._now_page())
@@ -726,7 +731,7 @@ class Main(W.QMainWindow):
 
     def switch_view(self):
         import subprocess
-        subprocess.Popen([str(paths.VENV_PYW), "-m", "aibroker.gui"], cwd=str(paths.ROOT))
+        subprocess.Popen([str(paths.VENV_PYW), "-m", "aibroker.gui"], cwd=str(paths.ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.quitting = True
         self.close()
 
@@ -946,6 +951,8 @@ def main(argv=None):
         win.resize(*[int(x) for x in size.lower().split("x")])
     win.go(page)
     win.show()
+    if "--auto-switch" in argv:
+        QtCore.QTimer.singleShot(3000, win.switch_view)
     if shot:
         def grab():
             win.grab().save(shot)

@@ -265,7 +265,7 @@ class Main(W.QMainWindow):
         super().__init__()
         self.setWindowTitle("AI Broker")
         self.setWindowIcon(make_icon())
-        self.resize(1500, 900)
+        self.resize(1240, 780)
         self.state = None
         self.types = {}
         self.hist_rev = -1
@@ -468,7 +468,7 @@ class Main(W.QMainWindow):
 
     def switch_view(self):
         import subprocess
-        subprocess.Popen([str(paths.VENV_PYW), "-m", "aibroker.gui_simple"], cwd=str(paths.ROOT))
+        subprocess.Popen([str(paths.VENV_PYW), "-m", "aibroker.gui_simple"], cwd=str(paths.ROOT), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.quitting = True
         self.close()
 
@@ -815,6 +815,8 @@ def main(argv=None):
         QtCore.QTimer.singleShot(3500, grab)
     else:
         win.show()
+    if "--auto-switch" in argv:
+        QtCore.QTimer.singleShot(3000, win.switch_view)
     sys.exit(app.exec())
 
 
