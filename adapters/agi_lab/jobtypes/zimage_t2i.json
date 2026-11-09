@@ -56,5 +56,12 @@
    "A weathered street courier in a rain jacket, studio light, full body",
    "A neon-lit alley at night, wet asphalt, cinematic"
   ]
+ },
+ "he_about": {
+  "what": "מודל שמצייר תמונה חדשה מתיאור במילים, בלי תמונת מקור.",
+  "inp": "תיאור באנגלית",
+  "out": "תמונה",
+  "example": "A weathered street courier in a rain jacket, studio light, full body",
+  "tip": "תיאור מפורט (מי, מה לובש, תאורה, רקע) נותן תוצאה טובה יותר מתיאור קצר."
  }
 }

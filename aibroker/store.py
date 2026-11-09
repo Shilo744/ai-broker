@@ -78,6 +78,20 @@ class Store:
             q = "SELECT finished-started FROM jobs WHERE est_key=? AND state='done' AND started>0 AND finished>started ORDER BY id DESC LIMIT ?"
             return [r[0] for r in self.db.execute(q, (est_key, n)).fetchall()]
 
+    def type_stats(self):
+        """{type: {n, median_s, ram, vram}} over the successful runs (the 'what it costs on this machine' line of the model pages)."""
+        import statistics
+        out = {}
+        with self.lock:
+            rows = self.db.execute("SELECT type, finished-started, peak_ws, peak_vram FROM jobs WHERE state='done' AND started>0 AND finished>started ORDER BY id DESC").fetchall()
+        by = {}
+        for t, d, ram, vr in rows:
+            by.setdefault(t, []).append((d, ram or 0, vr or 0))
+        for t, v in by.items():
+            v = v[:15]
+            out[t] = {"n": len(v), "median_s": statistics.median(x[0] for x in v), "ram": max(x[1] for x in v), "vram": max(x[2] for x in v)}
+        return out
+
     def next_pos(self):
         with self.lock:
             r = self.db.execute("SELECT MAX(pos) FROM jobs WHERE state='queued'").fetchone()

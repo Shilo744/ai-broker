@@ -611,6 +611,9 @@ class Broker:
         if op == "move":
             self.move([int(i) for i in req["ids"]], req["to"])
             return dict(ok=True)
+        if op == "type_stats":
+            with self.lock:
+                return dict(ok=True, stats=self.store.type_stats())
         if op == "preview":
             with self.lock:
                 return dict(ok=True, id=self.ensure_preview(req["path"]))

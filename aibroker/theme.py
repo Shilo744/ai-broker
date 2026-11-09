@@ -199,7 +199,7 @@ def dot_icon(color, size=10):
 
 
 def symbol_pixmap(symbol, color, size=96):
-    """A tinted rounded square with the line icon of that type (model list, result tiles)."""
+    """A tinted rounded square with the line icon of that type (model list, result tiles, start cards)."""
     dpr = 2.0
     px = int(size * dpr)
     pm = QtGui.QPixmap(px, px)
@@ -209,67 +209,68 @@ def symbol_pixmap(symbol, color, size=96):
     c = QtGui.QColor(color)
     p.setBrush(QtGui.QColor(c.red(), c.green(), c.blue(), 36))
     p.setPen(QtGui.QPen(QtGui.QColor(c.red(), c.green(), c.blue(), 100), 1.2))
-    r = size * dpr
-    p.drawRoundedRect(QtCore.QRectF(1, 1, r - 2, r - 2), r / 8, r / 8)
-    inner = icon_pixmap(SYMBOL_ICON.get(symbol, "doc"), color, int(size * 0.52), dpr)
-    off = (r - inner.width()) / 2
-    p.drawPixmap(int(off), int(off), inner)
+    p.drawRoundedRect(QtCore.QRectF(1, 1, px - 2, px - 2), px / 8, px / 8)
+    inner = icon_pixmap(SYMBOL_ICON.get(symbol, "doc"), color, int(px * 0.56), 1.0)     # device pixels: the target pixmap is still at ratio 1 while painting
+    off = (px - inner.width()) // 2
+    p.drawPixmap(off, off, inner)
     p.end()
     pm.setDevicePixelRatio(dpr)
     return pm
 
 
 # ------------------------------------------------------------------ logo
-# A rounded hexagon (the compute core) holding a geometric "B" whose middle bar is orange: the broker that sits between the requests and the machine.
-LOGO_TOP = "#22d8c0"
-LOGO_BOTTOM = "#0e5a78"
-LOGO_BAR = "#ffb340"
+# Three requests (three colours) converge into one ring (the machine) and leave as a single line: that is what the broker does.
+INPUTS = (("#35d0c4", "#6ee7f9"), ("#4c8dff", "#7ee7ff"), ("#9a6bff", "#7ee7ff"))
 
 
-def _hexagon(cx, cy, r):
-    import math
-    return QtGui.QPolygonF([QtCore.QPointF(cx + r * math.cos(math.radians(-90 + 60 * k)), cy + r * math.sin(math.radians(-90 + 60 * k))) for k in range(6)])
+def _grad(x0, x1, c1, c2):
+    g = QtGui.QLinearGradient(x0, 0, x1, 0)
+    g.setColorAt(0, QtGui.QColor(c1))
+    g.setColorAt(1, QtGui.QColor(c2))
+    return g
 
 
 def paint_logo(p, status=None, detail=True):
-    """Draws the logo into a 100x100 coordinate space."""
-    g = QtGui.QLinearGradient(14, 8, 86, 94)
-    g.setColorAt(0.0, QtGui.QColor(LOGO_TOP))
-    g.setColorAt(1.0, QtGui.QColor(LOGO_BOTTOM))
-    p.setBrush(g)
-    p.setPen(QtGui.QPen(QtGui.QBrush(g), 9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-    p.drawPolygon(_hexagon(50, 50, 42.5))
-    if detail:                                           # soft light from the top and a fine inner edge (only where there are enough pixels)
-        hl = QtGui.QLinearGradient(0, 4, 0, 60)
-        hl.setColorAt(0.0, QtGui.QColor(255, 255, 255, 52))
-        hl.setColorAt(1.0, QtGui.QColor(255, 255, 255, 0))
-        p.setPen(Qt.NoPen)
-        p.setBrush(hl)
-        p.drawPolygon(_hexagon(50, 50, 44))
-        p.setBrush(Qt.NoBrush)
-        p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 46), 1.4))
-        p.drawPolygon(_hexagon(50, 50, 35))
-    white = QtGui.QPen(QtGui.QColor("#ffffff"), 9, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin)
+    """Draws the logo into a 100x100 coordinate space: dark graphite tile, three converging lines, a ring, one line out."""
+    tile = QtGui.QLinearGradient(0, 0, 0, 100)
+    tile.setColorAt(0, QtGui.QColor("#272b33"))
+    tile.setColorAt(1, QtGui.QColor("#121418"))
+    p.setPen(Qt.NoPen)
+    p.setBrush(tile)
+    p.drawRoundedRect(QtCore.QRectF(0, 0, 100, 100), 23, 23)
+    if detail:
+        glow = QtGui.QRadialGradient(28, 18, 70)
+        glow.setColorAt(0, QtGui.QColor(255, 255, 255, 26))
+        glow.setColorAt(1, QtGui.QColor(255, 255, 255, 0))
+        p.setBrush(glow)
+        p.drawRoundedRect(QtCore.QRectF(0, 0, 100, 100), 23, 23)
     p.setBrush(Qt.NoBrush)
-    p.setPen(white)
-    stem = QtGui.QPainterPath()
-    stem.moveTo(39, 30)
-    stem.lineTo(39, 71)
-    p.drawPath(stem)
-    up = QtGui.QPainterPath()
-    up.moveTo(39, 30)
-    up.lineTo(52, 30)
-    up.arcTo(QtCore.QRectF(41.5, 30, 21, 21), 90, -180)
-    up.lineTo(39, 51)
-    p.drawPath(up)
-    lo = QtGui.QPainterPath()
-    lo.moveTo(39, 51)
-    lo.lineTo(54, 51)
-    lo.arcTo(QtCore.QRectF(44, 51, 20, 20), 90, -180)
-    lo.lineTo(39, 71)
-    p.drawPath(lo)
-    p.setPen(QtGui.QPen(QtGui.QColor(LOGO_BAR), 9, Qt.SolidLine, Qt.RoundCap))
-    p.drawLine(QtCore.QPointF(39, 51), QtCore.QPointF(53, 51))
+    p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 80 if detail else 110), 1.4))
+    p.drawRoundedRect(QtCore.QRectF(0.8, 0.8, 98.4, 98.4), 22.4, 22.4)
+    cx, cy = 55, 50
+    w_in = 5.6 if detail else 7.4
+    for y, (c1, c2) in zip((27, 50, 73), INPUTS):
+        path = QtGui.QPainterPath(QtCore.QPointF(13, y))
+        path.cubicTo(QtCore.QPointF(36, y), QtCore.QPointF(38, cy), QtCore.QPointF(cx, cy))
+        p.setBrush(Qt.NoBrush)
+        p.setPen(QtGui.QPen(QtGui.QBrush(_grad(13, cx, c1, c2)), w_in, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        p.drawPath(path)
+    if detail:
+        halo = QtGui.QRadialGradient(cx, cy, 20)
+        halo.setColorAt(0, QtGui.QColor(126, 231, 255, 120))
+        halo.setColorAt(1, QtGui.QColor(126, 231, 255, 0))
+        p.setPen(Qt.NoPen)
+        p.setBrush(halo)
+        p.drawEllipse(QtCore.QPointF(cx, cy), 20, 20)
+    p.setPen(QtGui.QPen(QtGui.QBrush(_grad(cx, 90, "#ffffff", "#7ee7ff")), 8 if detail else 10, Qt.SolidLine, Qt.RoundCap))
+    p.drawLine(QtCore.QPointF(cx, cy), QtCore.QPointF(87, cy))
+    p.setBrush(QtGui.QColor("#14161a"))
+    p.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 4.4 if detail else 5.6))
+    p.drawEllipse(QtCore.QPointF(cx, cy), 9 if detail else 10, 9 if detail else 10)
+    if detail:
+        p.setPen(Qt.NoPen)
+        p.setBrush(QtGui.QColor("#ffffff"))
+        p.drawEllipse(QtCore.QPointF(cx, cy), 3.2, 3.2)
     if status:                                           # tray: a status dot in the corner
         p.setPen(Qt.NoPen)
         p.setBrush(QtGui.QColor("#1e1f22"))
@@ -285,7 +286,7 @@ def logo_pixmap(size=64, status=None, dpr=2.0):
     p = QtGui.QPainter(pm)
     p.setRenderHint(QtGui.QPainter.Antialiasing)
     p.scale(px / 100.0, px / 100.0)
-    paint_logo(p, status, detail=px >= 40)
+    paint_logo(p, status, detail=px >= 36)
     p.end()
     pm.setDevicePixelRatio(dpr)
     return pm

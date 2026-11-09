@@ -447,6 +447,109 @@ class OutputDialog(W.QDialog):
             pass
 
 
+def fmt_typical(sec):
+    sec = float(sec or 0)
+    return "%d שניות" % round(sec) if sec < 90 else "%.1f דקות" % (sec / 60.0)
+
+
+def stats_line(tid, t, stats):
+    """What this kind of job costs on THIS computer: from earlier runs, or the estimate when it never ran."""
+    s_ = (stats or {}).get(tid)
+    if s_ and s_.get("n"):
+        gpu = (" · " + ltr("GPU %.0f GB" % s_["vram"])) if s_.get("vram", 0) >= 0.5 else ""
+        return "אצלך בדרך כלל: %s · %s%s · לפי %d ריצות" % (fmt_typical(s_["median_s"]), ltr("RAM %.0f GB" % s_["ram"]), gpu, s_["n"])
+    est = t.get("est") or {}
+    gpu = (" · " + ltr("GPU %.0f GB" % est["vram_gb"])) if est.get("vram_gb") else ""
+    return "עוד לא רץ אצלך. הערכה: %s%s" % (ltr("RAM %.0f GB" % est.get("ram_gb", 0)), gpu)
+
+
+def kv_row(label, text, mono=False, width=46, key=False):
+    h = W.QHBoxLayout()
+    h.setSpacing(8)
+    k = W.QLabel(label)
+    k.setObjectName("muted")
+    if key:
+        k.setLayoutDirection(Qt.LeftToRight)
+        k.setStyleSheet("font-family: Consolas; font-size: 9.5pt; color: #b4b8bf;")
+    k.setFixedWidth(width)
+    k.setAlignment(Qt.AlignTop | Qt.AlignRight)
+    v = W.QLabel(text)
+    v.setWordWrap(True)
+    v.setTextInteractionFlags(Qt.TextSelectableByMouse)
+    if mono:
+        v.setLayoutDirection(Qt.LeftToRight)
+        v.setStyleSheet("font-family: Consolas; font-size: 9.5pt; color: #b4b8bf; background: #1e1f22; border-radius: 4px; padding: 4px 8px;")
+    h.addWidget(k)
+    h.addWidget(v, 1)
+    return h
+
+
+def about_widget(g, types, stats):
+    """Plain-language page for one model: what it is, what goes in, what comes out, an example, a tip, and what it costs on this machine."""
+    w = W.QWidget()
+    v = W.QVBoxLayout(w)
+    v.setContentsMargins(0, 0, 0, 0)
+    v.setSpacing(8)
+    many = len(g["tids"]) > 1
+    for tid in g["tids"]:
+        t = types.get(tid, {})
+        ab = t.get("he_about")
+        if not ab:
+            continue
+        if many:
+            sub = W.QLabel(t.get("he_title") or tid)
+            sub.setStyleSheet("font-weight:600; color:#dfe1e5; padding-top:6px;")
+            v.addWidget(sub)
+        what = W.QLabel(ab["what"])
+        what.setWordWrap(True)
+        what.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        v.addWidget(what)
+        v.addLayout(kv_row("נכנס", ab["inp"]))
+        v.addLayout(kv_row("יוצא", ab["out"]))
+        if ab.get("example"):
+            v.addLayout(kv_row("דוגמה", ab["example"], mono=ab["example"].isascii()))
+        if ab.get("tip"):
+            tip = W.QLabel(ab["tip"])
+            tip.setObjectName("muted")
+            tip.setWordWrap(True)
+            v.addWidget(tip)
+        st = W.QLabel(stats_line(tid, t, stats))
+        st.setObjectName("muted")
+        st.setStyleSheet("color:#868a91; font-size:9pt;")
+        v.addWidget(st)
+    return w
+
+
+class AboutDialog(W.QDialog):
+    def __init__(self, main, g):
+        super().__init__(main)
+        self.setWindowTitle(g["title"])
+        self.setLayoutDirection(Qt.RightToLeft)
+        self.setMinimumWidth(560)
+        v = W.QVBoxLayout(self)
+        v.setContentsMargins(20, 16, 20, 16)
+        v.setSpacing(12)
+        top = W.QHBoxLayout()
+        ic = W.QLabel()
+        ic.setPixmap(symbol_pixmap(g["sym"], g["color"], 44))
+        t = W.QLabel(g["title"])
+        t.setObjectName("h1")
+        top.addWidget(ic)
+        top.addWidget(t, 1)
+        v.addLayout(top)
+        v.addWidget(about_widget(g, main.types, main.type_stats))
+        cfg = (main.types.get(g["tids"][0], {}).get("chat") or {})
+        if cfg:
+            kl = W.QLabel("קיצורים בתיבת הכתיבה")
+            kl.setObjectName("h2")
+            v.addWidget(kl)
+            for key_, what_ in (("Enter", "שולח"), ("Shift+Enter", "שורה חדשה"), ("Ctrl+V", "מדביק תמונה מהלוח"), ("↑", "מחזיר את ההודעה הקודמת"), ("גרירה", "גרירת קובץ לחלון מצרפת אותו")):
+                v.addLayout(kv_row(key_, what_, width=96, key=key_.isascii()))
+        b = W.QPushButton("סגור")
+        b.clicked.connect(self.accept)
+        v.addWidget(b, 0, Qt.AlignLeft)
+
+
 class Thumb(W.QLabel):
     """A clickable picture or file tile inside a chat bubble."""
     def __init__(self, pixmap, path, size=150, on_click=None, on_menu=None):
@@ -759,13 +862,9 @@ class ChatPanel(W.QFrame):
             self.chips.addStretch(1)
 
     def explain(self):
-        tid, cfg = self.cfg()
-        if cfg:
-            nl = chr(10)
-            txt = cfg["hint"]
-            if cfg.get("examples"):
-                txt += nl + nl + "דוגמאות:" + nl + nl.join(cfg["examples"])
-            W.QMessageBox.information(self, "איך זה עובד", txt + nl + nl + "Enter שולח. Shift+Enter שורה חדשה. Ctrl+V מדביק תמונה מהלוח. חץ למעלה מחזיר הודעה קודמת.")
+        g = next((x for x in self.main.models if x["dir"] == self.main.sel_model), None)
+        if g:
+            AboutDialog(self.main, g).exec()
 
     def cfg(self):
         tid = self.main.model_first_type()
@@ -827,15 +926,13 @@ class ChatPanel(W.QFrame):
         tcol.setSpacing(0)
         t = W.QLabel(g["title"])
         t.setObjectName("h1")
-        sub = W.QLabel("עוד לא נשלחו עבודות. התחל כאן:" if cfg else "משמש בעיקר את Claude")
+        sub = W.QLabel("עוד לא נשלחו עבודות" if cfg else "לא מופעל בשיחה: משמש בעיקר את Claude, ואפשר גם לשלוח עבודה ידנית")
         sub.setObjectName("muted")
         tcol.addWidget(t)
         tcol.addWidget(sub)
         top.addLayout(tcol, 1)
         v.addLayout(top)
-        hint = W.QLabel(cfg["hint"] if cfg else "לסוג הזה עדיין אין שיחה. אפשר לשלוח עבודה ידנית, והתוצאות יופיעו כאן.")
-        hint.setWordWrap(True)
-        v.addWidget(hint)
+        v.addWidget(about_widget(g, self.main.types, self.main.type_stats))
         if cfg and cfg.get("examples"):
             lab = W.QLabel("דוגמאות, לחץ כדי להעתיק לתיבה:")
             lab.setObjectName("muted")
@@ -851,7 +948,7 @@ class ChatPanel(W.QFrame):
                 btn.clicked.connect(lambda _=False, e=ex: (self.edit.setPlainText(e), self.edit.setFocus()))
                 fl.addWidget(btn)
             v.addWidget(holder)
-        elif not cfg:
+        if not cfg:
             btn = W.QPushButton("שלח עבודה ידנית…")
             btn.clicked.connect(lambda: self.main.open_submit(self.main.model_first_type()))
             v.addWidget(btn, 0, Qt.AlignRight)
@@ -893,7 +990,10 @@ class ChatPanel(W.QFrame):
         for j in jobs:
             self.add_job(j, cfg)
         self.col.addStretch(1)
-        QtCore.QTimer.singleShot(30, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))
+        if jobs:
+            QtCore.QTimer.singleShot(30, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))
+        else:
+            QtCore.QTimer.singleShot(30, lambda: self.scroll.verticalScrollBar().setValue(0))      # the start card is read from its top
 
     @staticmethod
     def outfiles(j):
@@ -1257,6 +1357,7 @@ class Main(W.QMainWindow):
         self.persist = True
         self.zoom = 1.0
         self.type_dir = {}
+        self.type_stats = {}
         self.setAcceptDrops(True)
         self._build()
         self.toaster = Toast(self.centralWidget())
@@ -1839,6 +1940,7 @@ class Main(W.QMainWindow):
             return
         self.types = r["types"]
         self.output_root = r.get("output_root", self.output_root)
+        self.refresh_type_stats()
         groups = {}
         for tid, t in self.types.items():
             if t.get("hidden"):
@@ -1856,6 +1958,14 @@ class Main(W.QMainWindow):
             for tid in g["tids"]:
                 self.type_dir[tid] = od
         self.fill_models()
+
+    def refresh_type_stats(self):
+        try:
+            r = client.call({"op": "type_stats"}, timeout=3)
+            if r.get("ok"):
+                self.type_stats = r["stats"]
+        except Exception:
+            pass
 
     def count_outputs(self, od):
         try:
@@ -1918,8 +2028,11 @@ class Main(W.QMainWindow):
                 od = it.data(Qt.UserRole)
                 it.setData(ROLE_RUN, run.get(od, 0))
                 it.setData(ROLE_WAIT, wait.get(od, 0))
+                gg = next((m for m in self.models if m["dir"] == od), None)
+                about = ((self.types.get(gg["tids"][0], {}).get("he_about") or {}).get("what") or "") if gg else ""
                 if od not in (None, "__assistant__"):
-                    it.setToolTip("%s" % it.text() + chr(10) + "רצות: %d   ממתינות: %d   תוצאות שמורות: %d" % (run.get(od, 0), wait.get(od, 0), it.data(ROLE_COUNT) or 0))
+                    it.setToolTip(about + chr(10) * 2 if about else "")
+                    it.setToolTip(it.toolTip() + "%s" % it.text() + chr(10) + "רצות: %d   ממתינות: %d   תוצאות שמורות: %d" % (run.get(od, 0), wait.get(od, 0), it.data(ROLE_COUNT) or 0))
         self.model_list.viewport().update()
 
     def on_model(self, row):
@@ -2192,6 +2305,7 @@ class Main(W.QMainWindow):
         self.log_text = self.log_text[-60000:]
         if s["hist_rev"] != self.hist_rev:
             self.hist_rev = s["hist_rev"]
+            self.refresh_type_stats()
             self.fill_history()
             self.files_sig = None
             self.refresh_files()

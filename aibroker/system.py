@@ -33,7 +33,7 @@ def set_autostart(on):
         return not LINK.exists()
     STARTUP_DIR.mkdir(parents=True, exist_ok=True)
     exe = str(paths.VENV_PYW if paths.VENV_PYW.exists() else paths.VENV_PY)
-    ico = paths.ROOT / "assets" / "ai-broker.ico"
+    ico = paths.ROOT / "assets" / "ai-broker-v3.ico"
     script = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%s');$s.TargetPath='%s';$s.Arguments='-m aibroker.gui --hidden';$s.WorkingDirectory='%s';"
               "$s.IconLocation='%s';$s.Description='AI Broker (starts hidden in the tray)';$s.Save()" % (LINK, exe, paths.ROOT, ico))
     _ps(script)
