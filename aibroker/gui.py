@@ -17,7 +17,7 @@ from . import i18n
 from .i18n import T
 from . import assistant, catalog, client, osutil, paths, permissions, system
 from .theme import QSS, SYMBOL_ICON, dot_icon, icon, icon_pixmap, logo_pixmap, make_icon, qss, save_ico, style_titlebar, sym_icon, symbol_pixmap
-from .kit import (Bar, Chip, Dot, FlowLayout, Gauge, MessageView, MiniGauge, ModelDelegate, NoticeBar, Palette, ROLE_COUNT, ROLE_KIND, ROLE_RUN, ROLE_WAIT, Seg, TaskWidget, ToolHeader, tool_button)
+from .kit import (Bar, Chip, Dot, FlowLayout, Gauge, MessageView, ModelDelegate, NoticeBar, Palette, ROLE_COUNT, ROLE_KIND, ROLE_RUN, ROLE_WAIT, ResStrip, Seg, TaskWidget, ToolHeader, tool_button)
 
 # look and feel (palette, icons, logo): see theme.py
 
@@ -2299,26 +2299,11 @@ class Main(W.QMainWindow):
         for b_ in (pal, ask, self.play, self.pause, adv):
             head.addWidget(b_)
         v.addWidget(bar)
-        strip = W.QFrame()
-        strip.setObjectName("resbar")
-        sh = W.QHBoxLayout(strip)
-        sh.setContentsMargins(16, 5, 12, 5)
-        sh.setSpacing(26)
-        self.g_ram, self.g_gpu = MiniGauge("RAM", "layers"), MiniGauge("GPU", "cpu")
-        self.g_disk, self.g_cpu = MiniGauge(T("דיסק"), "hdd", 56), MiniGauge("CPU", "chart", 56)
-        for g_ in (self.g_ram, self.g_gpu, self.g_disk, self.g_cpu):
-            sh.addWidget(g_)
-        sh.addStretch(1)
-        self.lim_btn = W.QPushButton(T("מגבלות"))
-        self.lim_btn.setObjectName("flat")
-        self.lim_btn.setIcon(icon("sliders", "#868a91", 14))
-        self.lim_btn.setToolTip(T("כמה RAM ו-GPU מותר ל-AI לקחת, כמה עבודות במקביל, ומספרי היום"))
+        self.res_strip = ResStrip()                 # kit.py: hides the less important parts when the window is narrow, so a bar never runs into a name
+        self.g_ram, self.g_gpu, self.g_disk, self.g_cpu = self.res_strip.ram, self.res_strip.gpu, self.res_strip.disk, self.res_strip.cpu
+        self.lim_btn = self.res_strip.lim_btn
         self.lim_btn.clicked.connect(self.open_limits)
-        self.lim_sum = W.QLabel("")
-        self.lim_sum.setObjectName("muted")
-        sh.addWidget(self.lim_sum)
-        sh.addWidget(self.lim_btn)
-        v.addWidget(strip)
+        v.addWidget(self.res_strip)
         split = W.QSplitter(Qt.Horizontal)
         split.setChildrenCollapsible(False)
         body = W.QWidget()
@@ -3096,7 +3081,7 @@ class Main(W.QMainWindow):
         self.g_ram.set(used, sy["ram_total"], "%.0f / %.0f GB" % (used, sy["ram_total"]), marker=lim["ram_gb"])
         self.g_gpu.set(sy["gpu_used"], sy["gpu_total"], "%.1f / %.0f GB" % (sy["gpu_used"], sy["gpu_total"]), marker=lim["vram_gb"])
         self.g_disk.set(sy["disk"], 100, "%.0f%%" % sy["disk"])
-        self.lim_sum.setText(T("עד %s · %s · %s עבודות במקביל") % (ltr("RAM %.0f GB" % lim["ram_gb"]), ltr("GPU %.0f GB" % lim["vram_gb"]), ltr("%d" % lim["max_jobs"])))
+        self.res_strip.set_summary(T("עד %s · %s · %s עבודות במקביל") % (ltr("RAM %.0f GB" % lim["ram_gb"]), ltr("GPU %.0f GB" % lim["vram_gb"]), ltr("%d" % lim["max_jobs"])))
         self.g_cpu.set(sy["cpu"], 100, "%.0f%%" % sy["cpu"])
         nrun, nq = len(s["running"]), len(s["queued"])
         counts = T("רצות %d, ממתינות %d") % (nrun, nq) if (nrun or nq) else T("אין עבודות כרגע")

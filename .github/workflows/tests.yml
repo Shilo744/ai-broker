@@ -34,6 +34,7 @@ jobs:
           python tests/test_catalog.py
           python tests/test_download.py
           python tests/test_platform.py
+          python tests/test_strip.py
       - name: Every module imports
         run: python -c "import aibroker.daemon, aibroker.gui, aibroker.mcp_server, aibroker.cli, aibroker.hardware, aibroker.system"
       - name: "End to end on a throw-away broker (queue, run anyway, setup, window)"

@@ -24,6 +24,8 @@ Kept up to date while working (what is done, what is open, what is NOT verified)
 | 16 | One double-click launcher that installs on first run | [x] `AI_Broker.bat` / `AI_Broker.command`; tested on a clean copy from git on Windows (306 s first run, 2.4 s second) |
 | 17 | Licence | [x] MIT (owner's choice) |
 | 18 | macOS and Linux support ("a universal tool") | [~] code written: `osutil` facade over `winutil` / `posixutil`, per-system data folder, auto budgets from the hardware, launch agent / autostart entry, shell-command classifier for macOS/Linux, `platforms` in the model packs, Ollama pack for a language model; `tests/test_platform.py` + GitHub Actions on windows/macos/ubuntu (unit tests, throw-away broker end to end, and `AI_Broker.bat/.command` from a clean checkout: all green, 2026-11-10). NOT tried by a person on a real Mac: no screenshot of the Mac window, the notification (`osascript`) and launch agent were never run, Ollama pack never installed |
+| 19 | Design flaw (owner's screenshot): in the Hebrew window the bar of RAM / GPU ran into the name next to it | [x] cause: the strip needs ~1350 px in Hebrew, the window may be 960+, and Qt then squeezes the gauges below their minimum. Now the strip hides the summary, then CPU, then disk when it is narrow (`kit.ResStrip`); `tests/test_strip.py` (960..2600 px, both directions) fails on the old behaviour |
+| 20 | App icon corners too round (owner: like Terminal Grid) | [x] tile radius 23 -> 12 (Terminal Grid measures 11.9); new `assets/ai-broker-v4.ico` (new name so Windows drops its cached icon), desktop / Start / Startup shortcuts repointed; the running window shows the new logo after a restart |
 
 ## Done (checked)
 - Tests never touch the owner's data (`tests/sandbox.py`).

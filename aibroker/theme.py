@@ -237,6 +237,9 @@ def _grad(x0, x1, c1, c2):
     return g
 
 
+TILE_R = 12       # corner radius of the logo tile, in the 100x100 logo space. It was 23: far rounder than the other icons on the desktop (Terminal Grid is about 12)
+
+
 def paint_logo(p, status=None, detail=True):
     """Draws the logo into a 100x100 coordinate space: dark graphite tile, three converging lines, a ring, one line out."""
     tile = QtGui.QLinearGradient(0, 0, 0, 100)
@@ -244,16 +247,16 @@ def paint_logo(p, status=None, detail=True):
     tile.setColorAt(1, QtGui.QColor("#121418"))
     p.setPen(Qt.NoPen)
     p.setBrush(tile)
-    p.drawRoundedRect(QtCore.QRectF(0, 0, 100, 100), 23, 23)
+    p.drawRoundedRect(QtCore.QRectF(0, 0, 100, 100), TILE_R, TILE_R)
     if detail:
         glow = QtGui.QRadialGradient(28, 18, 70)
         glow.setColorAt(0, QtGui.QColor(255, 255, 255, 26))
         glow.setColorAt(1, QtGui.QColor(255, 255, 255, 0))
         p.setBrush(glow)
-        p.drawRoundedRect(QtCore.QRectF(0, 0, 100, 100), 23, 23)
+        p.drawRoundedRect(QtCore.QRectF(0, 0, 100, 100), TILE_R, TILE_R)
     p.setBrush(Qt.NoBrush)
     p.setPen(QtGui.QPen(QtGui.QColor(255, 255, 255, 80 if detail else 110), 1.4))
-    p.drawRoundedRect(QtCore.QRectF(0.8, 0.8, 98.4, 98.4), 22.4, 22.4)
+    p.drawRoundedRect(QtCore.QRectF(0.8, 0.8, 98.4, 98.4), TILE_R - 0.6, TILE_R - 0.6)
     cx, cy = 55, 50
     w_in = 5.6 if detail else 7.4
     for y, (c1, c2) in zip((27, 50, 73), INPUTS):

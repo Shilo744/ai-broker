@@ -184,6 +184,7 @@ class MiniGauge(W.QFrame):
         self.num.setLayoutDirection(Qt.LeftToRight)
         self.num.setObjectName("muted")
         self.num.setMinimumWidth(78)
+        self.ic = ic
         for w in (ic, self.cap, self.bar, self.num):
             h.addWidget(w)
 
@@ -195,6 +196,63 @@ class MiniGauge(W.QFrame):
         self.bar.f, self.bar.color = f, color
         self.bar.marker = (marker / total) if (marker and total) else None
         self.bar.update()
+
+
+class ResStrip(W.QFrame):
+    """The resource strip under the header: RAM, GPU, disk and CPU gauges, the summary of the limits and the Limits button.
+    When the window is too narrow for all of it, the least important parts are hidden (the summary first, then CPU, then disk). Without this Qt squeezed the gauges
+    below their own minimum width as soon as the window was narrower than the strip (about 1350 px in Hebrew) and the bar ran into the name next to it."""
+    def __init__(self):
+        super().__init__()
+        self.setObjectName("resbar")
+        h = W.QHBoxLayout(self)
+        h.setContentsMargins(16, 5, 12, 5)
+        h.setSpacing(26)
+        self.ram, self.gpu = MiniGauge("RAM", "layers"), MiniGauge("GPU", "cpu")
+        self.disk, self.cpu = MiniGauge(T("דיסק"), "hdd", 56), MiniGauge("CPU", "chart", 56)
+        for g in (self.ram, self.gpu, self.disk, self.cpu):
+            h.addWidget(g)
+        h.addStretch(1)
+        self.lim_sum = W.QLabel("")
+        self.lim_sum.setObjectName("muted")
+        self.lim_btn = W.QPushButton(T("מגבלות"))
+        self.lim_btn.setObjectName("flat")
+        self.lim_btn.setIcon(icon("sliders", "#868a91", 14))
+        self._tip = T("כמה RAM ו-GPU מותר ל-AI לקחת, כמה עבודות במקביל, ומספרי היום")
+        self.lim_btn.setToolTip(self._tip)
+        h.addWidget(self.lim_sum)
+        h.addWidget(self.lim_btn)
+        self.droppable = (self.lim_sum, self.cpu, self.disk)      # the order in which they give way; RAM, GPU and the Limits button always stay
+
+    def set_summary(self, text):
+        """The one-line summary of the limits. It also goes into the tooltip of the button, for when there is no room to show it."""
+        if text != self.lim_sum.text():
+            self.lim_sum.setText(text)
+            self.lim_btn.setToolTip("%s\n%s" % (self._tip, text))
+            self.fit()
+
+    def fit(self):
+        lay = self.layout()
+        m = lay.contentsMargins()
+        widgets = [lay.itemAt(i).widget() for i in range(lay.count()) if lay.itemAt(i).widget() is not None]
+        hidden = []
+        for victim in list(self.droppable) + [None]:
+            shown = [w for w in widgets if w not in hidden]
+            need = m.left() + m.right() + sum(w.sizeHint().width() for w in shown) + lay.spacing() * len(shown)     # a gap after each item: the stretch counts as one more item
+            if victim is None or need <= self.width():
+                break
+            hidden.append(victim)
+        for w in widgets:
+            if w.isHidden() != (w in hidden):
+                w.setVisible(w not in hidden)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.fit()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self.fit()
 
 
 # ------------------------------------------------------------------ chips and pills

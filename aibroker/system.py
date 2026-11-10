@@ -44,7 +44,7 @@ def set_autostart(on):
     exe = str(paths.VENV_PYW if paths.VENV_PYW.exists() else paths.PYTHON)
     if not osutil.IS_WIN:
         return _write_autostart_file(exe)
-    ico = paths.ROOT / "assets" / "ai-broker-v3.ico"
+    ico = paths.ROOT / "assets" / "ai-broker-v4.ico"
     script = ("$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%s');$s.TargetPath='%s';$s.Arguments='-m aibroker.gui --hidden';$s.WorkingDirectory='%s';"
               "$s.IconLocation='%s';$s.Description='AI Broker (starts hidden in the tray)';$s.Save()" % (LINK, exe, paths.ROOT, ico))
     _ps(script)
