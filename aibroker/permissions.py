@@ -230,14 +230,14 @@ def analyze_shell(cmd, desc=""):
 
 # ---------------------------------------------------------------- every other tool
 BROKER = "mcp__ai-broker__"
-BROKER_READ = {"queue_status", "resources", "job_status", "job_output", "job_history", "list_job_types", "get_limits", "hardware_profile", "wait_for_job", "approve", "list_model_packs"}
-BROKER_RUN = {"submit_job", "rerun_job"}
+BROKER_READ = {"queue_status", "resources", "job_status", "job_output", "job_history", "list_job_types", "get_limits", "hardware_profile", "wait_for_job", "approve", "list_model_packs", "list_workflows", "save_workflow"}
+BROKER_RUN = {"submit_job", "rerun_job", "run_workflow"}
 BROKER_CONTROL = {"cancel_job", "move_job", "hold_job", "release_job", "pause_queue", "resume_queue", "set_playing_mode", "set_limits"}
 BROKER_TEXT = {
     "list_model_packs": "בודק אילו מודלים מתאימים למחשב", "install_model_pack": "מוריד מודלים",
     "queue_status": "בודק את התור", "resources": "בודק את המשאבים", "job_status": "בודק עבודה", "job_output": "קורא את הפלט של עבודה", "job_history": "קורא את ההיסטוריה",
     "list_job_types": "בודק אילו סוגי עבודות יש", "get_limits": "בודק את המגבלות", "hardware_profile": "בודק את החומרה של המחשב", "wait_for_job": "ממתין לסיום עבודה",
-    "submit_job": "מוסיף עבודה לתור", "rerun_job": "מריץ עבודה שוב", "cancel_job": "מבטל עבודה", "move_job": "משנה סדר בתור", "hold_job": "מחזיק עבודה בתור", "release_job": "משחרר עבודה",
+    "submit_job": "מוסיף עבודה לתור", "run_workflow": "מריץ שרשרת עבודות שמורה", "save_workflow": "שומר שרשרת עבודות", "list_workflows": "בודק אילו שרשראות עבודות שמורות יש", "rerun_job": "מריץ עבודה שוב", "cancel_job": "מבטל עבודה", "move_job": "משנה סדר בתור", "hold_job": "מחזיק עבודה בתור", "release_job": "משחרר עבודה",
     "pause_queue": "עוצר את התור", "resume_queue": "ממשיך את התור", "set_playing_mode": "משנה את מצב ״אני משחק״", "set_limits": "משנה את המגבלות של RAM ו-GPU",
 }
 PROTECTED_FILE = re.compile(r"(\.claude[\\/]|\.claude\.json|[\\/]windows[\\/]|[\\/]system32[\\/]|[\\/]program files|[\\/]startup[\\/]|\.ssh[\\/]|CLAUDE\.md$)", re.I)

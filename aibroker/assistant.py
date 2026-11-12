@@ -19,7 +19,7 @@ MCP_JSON = paths.ROOT / "mcp.json"
 HISTORY = paths.HOME / "assistant_chat.json"
 
 BROKER = "mcp__ai-broker__"
-SAFE = [BROKER + n for n in ("queue_status", "resources", "job_status", "job_output", "job_history", "list_job_types", "get_limits", "hardware_profile", "list_model_packs", "submit_job", "rerun_job")] + [
+SAFE = [BROKER + n for n in ("queue_status", "resources", "job_status", "job_output", "job_history", "list_job_types", "get_limits", "hardware_profile", "list_model_packs", "submit_job", "rerun_job", "run_workflow", "save_workflow", "list_workflows")] + [
     "Read", "Glob", "Grep", "WebSearch", "WebFetch",
     "Bash(nvidia-smi:*)", "Bash(dir:*)", "Bash(ls:*)", "Bash(du:*)", "Bash(where:*)",
     "Edit(docs/MODELS.md)", "Write(docs/MODELS.md)", "Edit(DOWNLOADS.md)", "Write(DOWNLOADS.md)"]
@@ -28,7 +28,7 @@ MODELS = {"haiku": "claude-haiku-5-5", "sonnet": "claude-sonnet-5-5", "default":
 
 FRIENDLY = {
     BROKER + "queue_status": T("בודק את התור"), BROKER + "resources": T("בודק את המשאבים"), BROKER + "job_status": T("בודק עבודה"), BROKER + "job_output": T("קורא את הפלט של עבודה"),
-    BROKER + "hardware_profile": T("בודק את החומרה של המחשב"), BROKER + "job_history": T("קורא את ההיסטוריה"), BROKER + "list_job_types": T("בודק אילו סוגי עבודות יש"), BROKER + "get_limits": T("בודק את המגבלות"), BROKER + "submit_job": T("שולח עבודה"),
+    BROKER + "hardware_profile": T("בודק את החומרה של המחשב"), BROKER + "job_history": T("קורא את ההיסטוריה"), BROKER + "list_job_types": T("בודק אילו סוגי עבודות יש"), BROKER + "get_limits": T("בודק את המגבלות"), BROKER + "submit_job": T("שולח עבודה"), BROKER + "run_workflow": T("מריץ שרשרת עבודות שמורה"), BROKER + "save_workflow": T("שומר שרשרת עבודות"), BROKER + "list_workflows": T("בודק אילו שרשראות עבודות שמורות יש"),
     BROKER + "rerun_job": T("מריץ עבודה שוב"), BROKER + "cancel_job": T("מבטל עבודה"), BROKER + "move_job": T("משנה סדר בתור"), BROKER + "set_limits": T("משנה מגבלות"),
     BROKER + "pause_queue": T("עוצר את התור"), BROKER + "resume_queue": T("ממשיך את התור"), BROKER + "set_playing_mode": T("משנה מצב ״אני משחק״"),
     "Read": T("קורא קובץ"), "Glob": T("מחפש קבצים"), "Grep": T("מחפש בקבצים"), "WebSearch": T("מחפש באינטרנט"), "WebFetch": T("קורא דף אינטרנט"), "Bash": T("בודק את המחשב"), "PowerShell": T("בודק את המחשב"),
@@ -92,6 +92,9 @@ def write_prompt():
     shell = "PowerShell" if osutil.IS_WIN else "bash / zsh"
     system_name = {"win32": "Windows", "darwin": "macOS"}.get(sys.platform, "Linux")
     base += "\n\nThis computer runs %s. Shell commands you write use %s syntax and this system's paths.\n" % (system_name, shell)
+    base += ("\n\nYour own program on this computer (paths are real, use them): program folder %s (the code, `DESIGN.md`, `catalog/packs.json`, shipped `jobtypes/*.json`); "
+             "the owner's own job types go in %s (a new `<id>.json` there is picked up at the next `list_job_types` call, no restart, and it survives updates); "
+             "saved workflows live in %s; the job outputs are under %s.\n") % (paths.ROOT, paths.USER_TYPES_DIR, paths.HOME / "workflows", paths.load_config().get("output_root", paths.ROOT / "output"))
     paths.HOME.mkdir(parents=True, exist_ok=True)
     out = paths.HOME / "assistant_prompt.md"
     out.write_text(base, encoding="utf-8")
@@ -115,7 +118,7 @@ class Worker(QtCore.QThread):
             self.proc.kill()
 
     def run(self):
-        cmd = [claude_exe(), "-p", self.message, "--output-format", "stream-json", "--verbose", "--mcp-config", str(write_mcp_config()), "--strict-mcp-config",
+        cmd = [claude_exe(), "-p", self.message, "--output-format", "stream-json", "--verbose", "--include-partial-messages", "--mcp-config", str(write_mcp_config()), "--strict-mcp-config",
                "--permission-prompt-tool", BROKER + "approve",
                "--append-system-prompt-file", str(write_prompt()), "--add-dir", str(paths.ROOT / "output"), "--max-turns", "30",
                "--allowedTools", ",".join(SAFE + self.extra_allow)]

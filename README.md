@@ -119,7 +119,7 @@ Every second the broker walks the queue in order and starts a job when all of th
 | `runners/` | small scripts that run a model |
 | `skill/` | instructions for agents (`SKILL.md`) and the assistant prompt |
 | `catalog/` | model packs of the setup (JSON: files with official URL, size and SHA-256, hardware needs, licence) |
-| `tests/` | `test_scheduler.py`, `test_permissions.py`, `test_i18n.py`, `test_catalog.py`, `test_download.py`, `test_platform.py`, `test_strip.py`, `ui_smoke.py`, `e2e_approval.py`, `e2e_setup.py`, `e2e_wizard.py`, `e2e_force.py` |
+| `tests/` | `test_scheduler.py`, `test_permissions.py`, `test_i18n.py`, `test_catalog.py`, `test_download.py`, `test_platform.py`, `test_strip.py`, `test_workflows.py`, `test_transcribe.py`, `test_instance.py`, `ui_smoke.py`, `e2e_approval.py`, `e2e_setup.py`, `e2e_wizard.py`, `e2e_force.py` |
 | `docs/` | model notes, test report, progress tracker |
 
 ## Development

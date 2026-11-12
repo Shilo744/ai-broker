@@ -60,6 +60,21 @@ def _default_gpu_lock():
     return legacy if os.path.isdir(os.path.dirname(legacy)) else str(HOME / ".gpu.lock").replace("\\", "/")
 
 
+def code_stamp():
+    """A number that changes when the program's code changes (the newest modification time of aibroker/*.py). The window and the service compare it with the one they started with
+    to know they are running old code."""
+    try:
+        return "%d" % max(int(f.stat().st_mtime) for f in (ROOT / "aibroker").glob("*.py"))
+    except (OSError, ValueError):
+        return "0"
+
+
+def _py_whisper():
+    """The Python with faster-whisper: <program folder>/.local/envs/whisper (not in the data folder: on Windows an app that runs inside a package, like the Claude desktop app, sees a different copy of AppData); until it exists, the broker's own Python (the job then says faster-whisper is missing)."""
+    p = ROOT / ".local" / "envs" / "whisper" / ("Scripts/python.exe" if IS_WIN else "bin/python")
+    return str(p if p.exists() else PYTHON).replace("\\", "/")
+
+
 def _default_blender():
     if IS_WIN:
         return "C:/Programs/Blender/blender.exe"
@@ -127,6 +142,12 @@ DEFAULT_CONFIG = {
         "py_venv": str(PYTHON).replace("\\", "/"),
         "blender": _default_blender(),
         "runners": str(ROOT / "runners").replace("\\", "/"),
+        "py_whisper": _py_whisper(),      # Python that has faster-whisper (its own environment); the broker's own Python when that is missing, so the job says "not installed"
+        "whisper_model": str(HOME / "models" / "whisper" / "ivrit-ai-large-v3-turbo-ct2").replace("\\", "/"),
+        "whisper_model_full": str(ROOT / ".local" / "models" / "whisper" / "ivrit-ai-large-v3-ct2").replace("\\", "/"),      # the full large-v3 (more accurate, slower than the turbo one)
+        "diar_seg": str(ROOT / ".local" / "models" / "diarization" / "sherpa-onnx-pyannote-segmentation-3-0" / "model.onnx").replace("\\", "/"),
+        "diar_emb": str(ROOT / ".local" / "models" / "diarization" / "3dspeaker_eres2net_base_16k.onnx").replace("\\", "/"),
+        "cudnn_dir": "C:/Migrated/AI/ComfyUI-Easy-Install/python_embeded/Lib/site-packages/torch/lib" if IS_WIN else "",     # a folder that has cuDNN 9 (ComfyUI's torch ships it)
     },
 }
 

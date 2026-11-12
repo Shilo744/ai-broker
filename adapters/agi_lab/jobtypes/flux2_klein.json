@@ -1,0 +1,81 @@
+{
+ "id": "flux2_klein",
+ "title": "FLUX.2 klein 4B image create / edit (ComfyUI)",
+ "group": "Images",
+ "klass": "gpu",
+ "model": "comfy-flux2",
+ "est": {
+  "ram_gb": 12,
+  "vram_gb": 9,
+  "commit_gb": 16
+ },
+ "max_parallel": 1,
+ "notes": "guess until measured",
+ "params": {
+  "prompt": {
+   "required": true
+  },
+  "image": {
+   "help": "optional: a picture to change by instruction (then the result keeps its proportions)"
+  },
+  "out": {
+   "default": "{outdir}/image.png",
+   "help": "output png (default: the job's own output folder)"
+  },
+  "w": 1024,
+  "h": 1024,
+  "seed": 1,
+  "steps": 4
+ },
+ "cmd": [
+  "{py_comfy}",
+  "-I",
+  "{lab_runners}/flux2_klein.py",
+  "--prompt",
+  "{prompt}",
+  "--out",
+  "{out}",
+  "--image",
+  "{image}",
+  "--w",
+  "{w}",
+  "--h",
+  "{h}",
+  "--seed",
+  "{seed}",
+  "--steps",
+  "{steps}"
+ ],
+ "icon": "🖼️",
+ "color": "#d17bd6",
+ "output_dir": "flux2",
+ "chat": {
+  "text": "prompt",
+  "file": "image",
+  "needs_file": false,
+  "hint": "זה מצייר תמונה מתיאור, ואם צירפת תמונה (גרור, הדבק או לחץ על הסיכה) הוא משנה אותה לפי ההוראה: צבע, רקע, הוספה והסרה של דברים. הקלד באנגלית.",
+  "examples": [
+   "A weathered street courier in a rain jacket, studio light, full body",
+   "Change the background to a rainy neon street at night",
+   "Remove the sunglasses and make the jacket dark red"
+  ]
+ },
+ "he_title": "יצירה ועריכת תמונות (FLUX)",
+ "he_desc": "מצייר תמונה מתיאור, או משנה תמונה קיימת לפי הוראה",
+ "he_group": "תמונות",
+ "he_about": {
+  "what": "מצייר תמונה מתיאור, ומשנה תמונה קיימת לפי הוראה: צבע, רקע, הוספה והסרה של דברים.",
+  "inp": "תיאור באנגלית, ואם רוצים לערוך גם תמונה",
+  "out": "תמונה (PNG)",
+  "tip": "4 צעדים בלבד, אז זה מהיר. כדי לקבל תמונה אחרת מאותו תיאור, שנה את ה-seed."
+ },
+ "en_title": "Image create and edit (FLUX)",
+ "en_group": "Images",
+ "en_desc": "Draws an image from a description, or changes an existing image by instruction",
+ "en_about": {
+  "what": "Draws an image from a description, and changes an existing image by instruction: colour, background, adding and removing things.",
+  "inp": "A description in English, and an image if you want to edit one",
+  "out": "An image (PNG)",
+  "tip": "Only 4 steps, so it is fast. Change the seed for another picture from the same description."
+ }
+}

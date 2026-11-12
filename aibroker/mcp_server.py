@@ -7,7 +7,7 @@ from typing import Annotated, Any
 from mcp.server.mcpserver import MCPServer
 from pydantic import Field
 
-from . import client
+from . import client, workflows
 
 INSTRUCTIONS = """AI Broker is the ONE entry point for heavy local AI/GPU work on this computer (image models such as Qwen/Z-Image through ComfyUI,
 TripoSG/Step1X 3D shapes, Blender cleaning and baking, music/sound models, hidden Godot test runs). NEVER start such a job directly in a shell:
@@ -80,6 +80,50 @@ def submit_job(
         return r
     g = _call({"op": "get", "id": r["id"]})
     return {"ok": True, "job_id": r["id"], "job": _brief(g["job"]) if g.get("ok") else {}, "next_step": "wait_for_job(job_id) or run `aijob wait %d` in the background" % r["id"]}
+
+
+@mcp.tool()
+def save_workflow(
+    name: Annotated[str, Field(description="Short ASCII id, e.g. 'car_to_3d'. Saving again under the same name replaces it.")],
+    steps: Annotated[list[dict[str, Any]], Field(description="Steps run one after another; the next starts only if the one before succeeded. Each step: {id, type (from list_job_types), params, name?} "
+                                                             "or {id, type:'custom', command:[...], est_ram_gb} . In params use {var} for a workflow variable and {earlier_step_id.outdir} "
+                                                             "for the output folder of an EARLIER step, e.g. {'image': '{img.outdir}/out.png'}.")],
+    title: Annotated[str, Field(description="Human title shown to the owner.")] = "",
+    description: Annotated[str, Field(description="One or two plain sentences: what it makes and from what.")] = "",
+    vars: Annotated[dict[str, Any] | None, Field(description="Variables the owner may change at run time, with defaults, e.g. {'prompt': 'a red car'}.")] = None,
+) -> dict:
+    """Save a reusable workflow (a chain of broker jobs, for example image -> 3D shape -> clean-up). Checks the job types and the {references}. Run it with run_workflow."""
+    t = _call({"op": "types"}, start=True)
+    known = set(t["types"]) if t.get("ok") else None
+    return workflows.save({"name": name, "title": title, "description": description, "vars": vars or {}, "steps": steps}, known)
+
+
+@mcp.tool()
+def list_workflows() -> dict:
+    """The saved workflows: name, title, description, step ids and the variables you can set."""
+    return {"ok": True, "workflows": workflows.listing()}
+
+
+@mcp.tool()
+def run_workflow(
+    name: Annotated[str, Field(description="A saved workflow name (see list_workflows).")],
+    values: Annotated[dict[str, Any] | None, Field(description="Values for the workflow's variables; missing ones use the defaults.")] = None,
+) -> dict:
+    """Queue every step of a saved workflow as chained jobs (each waits for the one before it). Returns the job id of every step; follow them with job_status / wait_for_job."""
+    wf = workflows.load(name)
+    if not wf:
+        return {"ok": False, "error": "no workflow called %r" % name, "have": [w["name"] for w in workflows.listing()]}
+
+    def submit(q):
+        req = dict(op="submit", type=q["type"], params=q["params"], name=q["name"], requester=REQUESTER, cmd=q.get("command"), after=q["after"], timeout_s=q.get("timeout_s"),
+                   est={k[4:]: q[k] for k in ("est_ram_gb", "est_vram_gb") if q.get(k) is not None} or None)
+        r = _call(req, start=True)
+        if not r.get("ok"):
+            return r
+        g = _call({"op": "get", "id": r["id"]})
+        return {"ok": True, "id": r["id"], "outdir": (g.get("job") or {}).get("outdir", "") if g.get("ok") else ""}
+
+    return workflows.run(wf, values, submit)
 
 
 @mcp.tool()

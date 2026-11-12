@@ -50,6 +50,18 @@ def roots(cfg=None):
     return out
 
 
+def thumb_path(pack):
+    """Absolute path of the pack's preview picture (its 'thumb' entry, relative to the catalog folder), or '' when there is none or the file is missing."""
+    rel = pack.get("thumb")
+    if not rel:
+        return ""
+    for d in CATALOG_DIRS:
+        p = Path(d) / rel
+        if p.is_file():
+            return str(p)
+    return ""
+
+
 def file_path(f, rts):
     base = rts.get(f.get("root", "models"))
     return str(Path(base) / f["dest"]) if base else None

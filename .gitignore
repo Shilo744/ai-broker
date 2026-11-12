@@ -8,3 +8,7 @@ output/
 result.json
 shots/
 shots/
+.local/
+
+# a picture cropped from the FLUX model card (its licence was not checked): kept on the owner's computer, not published
+catalog/thumbs/flux2_klein.jpg

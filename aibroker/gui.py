@@ -4,6 +4,9 @@ Jobs are submitted by Claude through MCP/CLI; the owner mostly watches. A small 
 The window is only a client of the broker service: closing it never stops the queue.
   python -m aibroker.gui [--screenshot out.png] [--model <output_dir>] [--tab 0|1] [--size 1280x800] [--no-tray]"""
 import json
+import shutil
+import subprocess
+import wave
 import os
 import re
 import sys
@@ -15,8 +18,8 @@ from PySide6.QtCore import Qt
 
 from . import i18n
 from .i18n import T
-from . import assistant, catalog, client, osutil, paths, permissions, system
-from .theme import QSS, SYMBOL_ICON, dot_icon, icon, icon_pixmap, logo_pixmap, make_icon, qss, save_ico, style_titlebar, sym_icon, symbol_pixmap
+from . import assistant, catalog, client, osutil, paths, permissions, system, transcript_fmt, winshell, instance
+from .theme import QSS, SUB, SYMBOL_ICON, dot_icon, icon, icon_pixmap, logo_pixmap, make_icon, qss, save_ico, style_titlebar, sym_icon, symbol_pixmap
 from .kit import (Bar, Chip, Dot, FlowLayout, Gauge, MessageView, ModelDelegate, NoticeBar, Palette, ROLE_COUNT, ROLE_KIND, ROLE_RUN, ROLE_WAIT, ResStrip, Seg, TaskWidget, ToolHeader, tool_button)
 
 # look and feel (palette, icons, logo): see theme.py
@@ -43,6 +46,27 @@ def fmt_dur(s):
 def fmt_limit(key, v):
     v = int(round(v))
     return str(v) if key == "max_jobs" else ("%d%%" % v if key == "disk_busy_pct" else "%d GB" % v)
+
+
+def log_progress(j):
+    """(percent, text) from the last line `PROGRESS <percent> <text>` in a running job's output, or None. Any job type may print such lines to get a real progress bar."""
+    f = j.get("log")
+    if not f:
+        return None
+    try:
+        with open(f, "rb") as fh:
+            fh.seek(0, 2)
+            fh.seek(max(0, fh.tell() - 4096))
+            tail = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return None
+    m = re.findall(r"^PROGRESS ([0-9.]+) ?(.*)$", tail, re.M)
+    if not m:
+        return None
+    try:
+        return max(0.0, min(100.0, float(m[-1][0]))), m[-1][1].strip()
+    except ValueError:
+        return None
 
 
 def eta_text(j):
@@ -115,12 +139,14 @@ class Poller(QtCore.QThread):
 
 
 class QueueTable(W.QTableWidget):
-    COLS = ["#", T("סוג"), T("עבודה"), T("ביקש"), T("מצב"), T("זמן"), "RAM", T("פרטים")]
+    COLS = ["#", T("סוג"), T("עבודה"), T("ביקש"), T("מצב"), T("זמן"), "RAM", "GPU", T("פרטים")]
     reorder = QtCore.Signal(list, int)
 
     def __init__(self):
         super().__init__(0, len(self.COLS))
         self.setHorizontalHeaderLabels(self.COLS)
+        self.horizontalHeaderItem(6).setToolTip(T("זיכרון המחשב (RAM) שהעבודה תופסת"))
+        self.horizontalHeaderItem(7).setToolTip(T("זיכרון כרטיס המסך (VRAM) שהעבודה תופסת"))
         self.verticalHeader().hide()
         self.verticalHeader().setDefaultSectionSize(36)
         self.setAlternatingRowColors(True)
@@ -135,7 +161,7 @@ class QueueTable(W.QTableWidget):
         self.setDefaultDropAction(Qt.CopyAction)
         hh = self.horizontalHeader()
         hh.setStretchLastSection(True)
-        for i, wd in enumerate((34, 124, 150, 80, 84, 52, 70)):
+        for i, wd in enumerate((34, 124, 150, 80, 84, 52, 70, 76)):
             self.setColumnWidth(i, wd)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.job_ids, self.queued_ids = [], []
@@ -830,13 +856,18 @@ class Bubble(W.QFrame):
 
 class ChatPanel(W.QFrame):
     """A normal chat with one model: you write (or drop / paste a file), the model answers with its result. Built from the job history of that model."""
+    play_error = QtCore.Signal(str)
+
     def __init__(self, main):
         super().__init__()
         self.main = main
+        self.play_error.connect(lambda e: self.main.toast(T("ההשמעה נכשלה: ") + e[:120], "bad"))
         self.setObjectName("editor")
         self.attached = None
         self.sig = None
         self.fail_cache = {}
+        self.name_edits = {}
+        self.sample_idx = {}
         self.recall, self.recall_i = [], -1
         outer = W.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -892,8 +923,12 @@ class ChatPanel(W.QFrame):
         self.send_btn.setIcon(icon("send", "#ffffff", 16))
         self.send_btn.setCursor(Qt.PointingHandCursor)
         self.send_btn.clicked.connect(self.send)
+        self.choice_box = W.QComboBox()                                   # a job type may offer a choice right here (for example Small / Large model)
+        self.choice_box.setVisible(False)
+        self.choice_box.currentIndexChanged.connect(self.remember_choice)
         row.addWidget(self.hint_lbl)
         row.addStretch(1)
+        row.addWidget(self.choice_box)
         row.addWidget(self.adv_btn)
         row.addWidget(self.attach_btn)
         row.addWidget(self.send_btn)
@@ -962,11 +997,16 @@ class ChatPanel(W.QFrame):
         if p:
             self.set_attached(p)
 
+    @staticmethod
+    def drop_text(cfg):
+        """What the empty drop box says: a job type may name its own kind of input (a recording, not a picture)."""
+        return (cfg.get("drop_text_en") if i18n.lang() == "en" and cfg.get("drop_text_en") else cfg.get("drop_text")) or T("גרור לכאן תמונה, הדבק (Ctrl+V), או לחץ על הסיכה")
+
     def set_attached(self, path):
         self.attached = path
         tid, cfg = self.cfg()
         if cfg and not cfg.get("text"):
-            self.drop_zone.setText((T("נבחרה תמונה: ") + Path(path).name + T("   (לחץ ״צור דגם 3D״)")) if path else T("גרור לכאן תמונה, הדבק (Ctrl+V), או לחץ על הסיכה"))
+            self.drop_zone.setText((T("נבחר קובץ: ") + Path(path).name + "   (" + (cfg.get("send_label") or T("צור דגם 3D")) + ")") if path else self.drop_text(cfg))
         while self.chips.count():
             it = self.chips.takeAt(0)
             if it.widget():
@@ -1012,12 +1052,37 @@ class ChatPanel(W.QFrame):
         g = next((x for x in m.models if x["dir"] == m.sel_model), None)
         f = self.attached
         msg = T("המשתמש פתח את דף המודל ״%s״ (סוגי עבודה בתור: %s) ומבקש: %s") % (g["title"] if g else "", ", ".join(g["tids"]) if g else "", text)
+        if g and g.get("pack"):
+            pk = g["pack"]
+            msg += chr(10) + T("זה מודל שהותקן אבל עוד אין לו סוג עבודה בתור (pack id: %s, מקור: %s). בדוק איך מריצים אותו ופעל. אם כדאי להפוך אותו לסוג עבודה קבוע, הצע ליצור לו סוג עבודה קבוע (קובץ בתיקיית סוגי העבודה של המשתמש, לפי ההוראות שלך), ובקש אישור.") % (pk["id"], pk.get("source", ""))
         if f:
             msg += chr(10) + T("קובץ מצורף: ") + f
         msg += chr(10) + T("הפעל את זה דרך ה-broker (submit_job). אם חסר מידע, שאל אותי בקצרה. התוצאות נשמרות בתיקיית המודל ומופיעות בדף שלו.")
         self.edit.clear()
         self.set_attached(None)
         m.ask_assistant(text + (("   (+ %s)" % Path(f).name) if f else ""), msg)
+
+    def fill_choice(self, tid, cfg):
+        ch = (cfg or {}).get("choice")
+        self.choice_box.setVisible(bool(ch))
+        if not ch or getattr(self, "_choice_for", None) == tid:
+            return
+        self._choice_for = tid
+        en = i18n.lang() == "en"
+        self.choice_box.blockSignals(True)
+        self.choice_box.clear()
+        for o in ch["options"]:
+            self.choice_box.addItem((o.get("label_en") if en and o.get("label_en") else o["label"]), o["value"])
+        saved = self.main.settings.value("choice_" + tid, ch.get("default")) if getattr(self.main, "settings", None) else ch.get("default")
+        i = self.choice_box.findData(saved)
+        self.choice_box.setCurrentIndex(i if i >= 0 else 0)
+        self.choice_box.setToolTip((ch.get("label_en") if en and ch.get("label_en") else ch.get("label", "")))
+        self.choice_box.blockSignals(False)
+
+    def remember_choice(self):
+        tid, cfg = self.cfg()
+        if tid and (cfg or {}).get("choice") and getattr(self.main, "settings", None) and getattr(self.main, "persist", True):
+            self.main.settings.setValue("choice_" + tid, self.choice_box.currentData())
 
     def send(self):
         tid, cfg = self.cfg()
@@ -1039,6 +1104,8 @@ class ChatPanel(W.QFrame):
                 return
             if f:
                 params[cfg["file"]] = f
+        if cfg.get("choice") and self.choice_box.currentData() is not None:
+            params[cfg["choice"]["param"]] = self.choice_box.currentData()
         name = (text[:28] if text else Path(f or "job").stem[:28])
         r = self.main.api(dict(op="submit", type=tid, params=params, name=name, requester="owner"))
         if r and r.get("ok"):
@@ -1072,6 +1139,11 @@ class ChatPanel(W.QFrame):
         tcol.addWidget(sub)
         top.addLayout(tcol, 1)
         v.addLayout(top)
+        if g.get("what"):
+            wl = W.QLabel(g["what"])
+            wl.setWordWrap(True)
+            wl.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            v.addWidget(wl)
         v.addWidget(about_widget(g, self.main.types, self.main.type_stats))
         if cfg and cfg.get("examples"):
             lab = W.QLabel(T("דוגמאות, לחץ כדי להעתיק לתיבה:"))
@@ -1104,6 +1176,10 @@ class ChatPanel(W.QFrame):
         if sig == self.sig and not force:
             return
         self.sig = sig
+        bar = self.scroll.verticalScrollBar()
+        same_page = getattr(self, "_page", None) == m.sel_model       # a rebuild of the page you are on must not throw you to its start
+        was_value, was_bottom = bar.value(), bar.value() >= bar.maximum() - 6
+        self._page = m.sel_model
         while self.col.count():
             it = self.col.takeAt(0)
             if it.widget():
@@ -1115,18 +1191,19 @@ class ChatPanel(W.QFrame):
         self.edit.setVisible(has_text)
         self.drop_zone.setVisible(bool(cfg) and not has_text)
         if cfg and not has_text and not self.attached:
-            self.drop_zone.setText(T("גרור לכאן תמונה, הדבק (Ctrl+V), או לחץ על הסיכה"))
+            self.drop_zone.setText(self.drop_text(cfg))
         self.attach_btn.setVisible(has_file)
         if proxy:
             self.send_btn.setText(T("בקש מ-Claude"))
             self.send_btn.setIcon(icon("sparkles", "#ffffff", 16))
             self.edit.setPlaceholderText(T("תאר מה תרצה לעשות עם %s, ו-Claude יפעיל את זה בשבילך…") % (g["title"] if g else T("המודל")))
         else:
-            self.send_btn.setText(T("שלח") if has_text and has_file else (T("צייר") if has_text else T("צור דגם 3D")))
+            self.send_btn.setText(T("שלח") if has_text and has_file else (T("צייר") if has_text else (cfg.get("send_label") or T("צור דגם 3D"))))
             self.send_btn.setIcon(icon("send", "#ffffff", 16))
             self.edit.setPlaceholderText(T("כתוב כאן מה לעשות…"))
         self.hint_lbl.setVisible(has_text)
         self.adv_btn.setVisible(has_text)
+        self.fill_choice(tid, cfg)
         if cfg and cfg.get("text"):
             self.recall = [str((j.get("params") or {}).get(cfg["text"]) or "") for j in jobs if (j.get("params") or {}).get(cfg["text"])]
         empty = not jobs and g
@@ -1136,10 +1213,173 @@ class ChatPanel(W.QFrame):
         for j in jobs:
             self.add_job(j, cfg)
         self.col.addStretch(4 if empty else 1)
-        if jobs:
-            QtCore.QTimer.singleShot(30, lambda: self.scroll.verticalScrollBar().setValue(self.scroll.verticalScrollBar().maximum()))
+        def place():
+            b = self.scroll.verticalScrollBar()
+            if not jobs:
+                b.setValue(0)                                    # the start card is read from its top
+            elif same_page and not was_bottom:
+                b.setValue(min(was_value, b.maximum()))          # you were reading higher up: stay there
+            else:
+                b.setValue(b.maximum())                          # new page, or you were at the end: follow the newest
+        place()
+        self._place, self._place_until = place, time.time() + 0.8      # the layout settles (and pictures load) after the widgets are added: keep the position while the range grows
+        if not getattr(self, "_range_hooked", False):
+            self._range_hooked = True
+            bar.rangeChanged.connect(lambda *_: self._place() if time.time() < self._place_until else None)
+        for ms in (0, 30, 120):
+            QtCore.QTimer.singleShot(ms, place)
+
+    def preempt(self, jid):
+        r = self.main.api({"op": "preempt", "id": jid})
+        if r and r.get("ok"):
+            self.main.toast(T("עצרתי את העבודה שרצה, והיא תחזור לתור. העבודה הזאת רצה עכשיו"), "ok")
         else:
-            QtCore.QTimer.singleShot(30, lambda: self.scroll.verticalScrollBar().setValue(0))      # the start card is read from its top
+            self.main.toast(T("לא הצלחתי: ") + str((r or {}).get("error", ""))[:120], "bad")
+
+    def _play_icon(self, btn, on):
+        """The button of the clip that is playing shows 'pause' (click to stop); every other one shows 'play'."""
+        try:
+            btn.setIcon(icon("pause" if on else "play", "#3574f0" if on else SUB, 16))
+            btn.setProperty("playing", on)
+        except RuntimeError:                                  # the page was rebuilt and the button is gone
+            pass
+
+    def is_playing(self, path):
+        cur = getattr(self, "playing", None)
+        return bool(cur and cur[0] == path and time.time() < cur[1])
+
+    def stop_clip(self):
+        if osutil.IS_WIN:
+            import winsound
+            winsound.PlaySound(None, winsound.SND_PURGE)
+        else:
+            proc = getattr(self, "play_proc", None)
+            if proc and proc.poll() is None:
+                proc.terminate()
+        self.playing = None
+        if getattr(self, "play_btn", None) is not None:
+            self._play_icon(self.play_btn, False)
+            self.play_btn = None
+
+    def play_clip(self, path, btn=None):
+        """Play a short .wav (a sample of a speaker's voice) with the system's own player, no extra package. While it plays its button shows 'pause'; clicking it stops it, and when the
+        clip ends the button goes back to 'play'. Playing happens on its own thread, so a failure (no sound device, a file that cannot be played) is reported instead of staying silent."""
+        import threading
+        if self.is_playing(path):
+            self.stop_clip()
+            return
+        self.stop_clip()
+        try:
+            with wave.open(path) as w:
+                secs = w.getnframes() / float(w.getframerate())
+        except (OSError, wave.Error, EOFError):
+            self.main.toast(T("אין קובץ קול לדובר הזה"), "warn")
+            return
+        if osutil.IS_WIN:
+            import winsound
+
+            def go():
+                try:
+                    winsound.PlaySound(path, winsound.SND_FILENAME)
+                except Exception as e:
+                    self.play_error.emit(str(e))
+            threading.Thread(target=go, daemon=True).start()
+        else:
+            exe = next((x for x in (shutil.which("afplay"), shutil.which("paplay"), shutil.which("aplay")) if x), None)
+            if not exe:
+                self.main.toast(T("ההשמעה לא זמינה בהתקנה הזאת"), "warn")
+                return
+            self.play_proc = subprocess.Popen([exe, path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.playing = (path, time.time() + secs)
+        self.play_btn = btn
+        if btn is not None:
+            self._play_icon(btn, True)
+        self.play_gen = getattr(self, "play_gen", 0) + 1
+        QtCore.QTimer.singleShot(int(secs * 1000) + 250, lambda g=self.play_gen: self.play_ended(g))
+
+    def play_ended(self, gen):
+        if gen == getattr(self, "play_gen", None) and getattr(self, "playing", None) is not None:
+            self.stop_clip()
+
+    def transcript_panel(self, bubble, j):
+        """A finished transcription: the start of the text, and for each speaker a sample to listen to and a name field. Saving the names rewrites the transcript files."""
+        d = j.get("outdir")
+        tj = Path(d) / "transcript.json" if d else None
+        if not tj or not tj.exists():
+            return
+        try:
+            data = json.loads(tj.read_text(encoding="utf-8"))
+            text = (Path(d) / "transcript.txt").read_text(encoding="utf-8")
+        except (OSError, ValueError):
+            return
+        bubble.message(text[:1800] + (" …" if len(text) > 1800 else ""))
+        speakers = data.get("speakers") or []
+        if not speakers:
+            return
+        cap = W.QLabel(T("דוברים: האזן לקטע וכתוב שם. השם יופיע בתסריט המלא"))
+        cap.setObjectName("muted")
+        bubble.lay.addWidget(cap)
+        edits = {}
+        for sp in speakers:
+            clips = sp.get("samples") or [{"file": sp["sample"], "text": ""}]          # older results have one sample only
+            key = (j["id"], sp["id"])
+            box = W.QVBoxLayout()
+            box.setSpacing(2)
+            row = W.QHBoxLayout()
+            snippet = W.QLabel()
+            snippet.setObjectName("muted")
+            snippet.setWordWrap(True)
+
+            def show(k, play_it, sp=sp, clips=clips, snippet=snippet, key=key):
+                k %= len(clips)
+                self.sample_idx[key] = k
+                c = clips[k]
+                snippet.setText(("%d/%d   “%s”" % (k + 1, len(clips), c["text"][:140])) if c.get("text") else "")
+                if play_it:
+                    self.play_clip(str(Path(d) / c["file"]))
+            first = self.sample_idx.get(key, 0) % len(clips)
+
+            def cur_path(clips=clips, key=key):
+                return str(Path(d) / clips[self.sample_idx.get(key, 0) % len(clips)]["file"])
+            play = tool_button("play", T("השמע קטע מהקול הזה"), None, size=16)
+            play.clicked.connect(lambda _=False, show=show, key=key, play=play, cur_path=cur_path: (show(self.sample_idx.get(key, 0), False), self.play_clip(cur_path(), play)))
+            play.setEnabled(os.path.exists(str(Path(d) / clips[first]["file"])))
+            if self.is_playing(cur_path()):                    # the page was rebuilt while this clip plays
+                self.play_btn = play
+                self._play_icon(play, True)
+            row.addWidget(play)
+
+            def another(_=False, show=show, key=key, play=play, n=len(clips), cur_path=cur_path):      # every name is bound here: a loop variable would be the last speaker's
+                if n < 2:
+                    self.main.toast(T("בתמלול הזה יש קטע אחד בלבד לכל דובר. הרץ אותו שוב כדי לקבל כמה קטעים לבחירה"), "info")
+                    return
+                self.stop_clip()
+                show(self.sample_idx.get(key, 0) + 1, False)
+                self.play_clip(cur_path(), play)
+            other = tool_button("refresh", T("קטע אחר של הדובר הזה (אם לא ברור מי מדבר)"), another, size=16)
+            row.addWidget(other)
+            ed = W.QLineEdit()
+            ed.setText(self.name_edits.get(key, (data.get("names") or {}).get(str(sp["id"]), "")))
+            ed.setPlaceholderText(T("דובר %d") % sp["id"] if data.get("language") == "he" else "Speaker %d" % sp["id"])
+            ed.textChanged.connect(lambda t, k=key: self.name_edits.__setitem__(k, t))     # a rebuild of the page must not lose what is being typed
+            edits[str(sp["id"])] = ed
+            row.addWidget(ed, 1)
+            box.addLayout(row)
+            show(first, False)
+            box.addWidget(snippet)
+            bubble.lay.addLayout(box)
+        save = W.QPushButton(T("שמור שמות בתסריט"))
+        save.setObjectName("tool")
+
+        def do_save(_=False, folder=d, fields=edits, jid=j["id"]):
+            transcript_fmt.rename(folder, {k: f.text() for k, f in fields.items()})
+            for k in [k for k in self.name_edits if k[0] == jid]:
+                del self.name_edits[k]
+            self.sig = None
+            self.main.refresh_chat(force=True)
+            self.main.toast(T("השמות נשמרו בתסריט"), "ok")
+        save.clicked.connect(do_save)
+        bubble.lay.addWidget(save, 0, Qt.AlignLeft)
 
     @staticmethod
     def outfiles(j):
@@ -1193,6 +1433,8 @@ class ChatPanel(W.QFrame):
             pm = QtGui.QPixmap(str(fp))
             if not pm.isNull():
                 u.row([Thumb(pm.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation), str(fp))])
+            else:
+                u.text(Path(str(fp)).name)                      # a recording or another file: show its name, not an empty bubble
         if not txt and not (fp and os.path.exists(str(fp))):
             u.text(j["name"])
         self.col.addWidget(aligned(u, "user"))
@@ -1211,7 +1453,12 @@ class ChatPanel(W.QFrame):
             pb.setTextVisible(False)
             pb.setFixedHeight(4)
             typ = j.get("typical_s")
-            if typ and st == "running":
+            prog = log_progress(j) if st == "running" else None
+            if prog:
+                pb.setRange(0, 100)
+                pb.setValue(int(prog[0]))
+                a.text("%d%%   %s" % (prog[0], prog[1]) + ("   " + eta_text(j) if typ else ""), muted=True)
+            elif typ and st == "running":
                 pb.setRange(0, 100)
                 pb.setValue(min(95, int(100 * j.get("elapsed", 0) / typ)))
                 a.text(eta_text(j), muted=True)
@@ -1235,6 +1482,7 @@ class ChatPanel(W.QFrame):
                 t = Thumb(symbol_pixmap(s2, col, 84), f)
                 t.setToolTip(f)
                 tiles.append(t)
+            self.transcript_panel(a, j)
             if tiles:
                 a.row(tiles)
                 names = W.QLabel("   ".join(Path(f).name for f in self.outfiles(j)[:4]))
@@ -1266,7 +1514,12 @@ class ChatPanel(W.QFrame):
         if st == "queued" and not j.get("held") and str(j.get("reason", "")).startswith(("VRAM budget", "RAM budget", "max concurrent", "free RAM", "free commit", "disk busy")):
             row.addWidget(self.act_button("play", T("הרץ בכל זאת"), lambda _=False, i=j["id"]: m.api({"op": "force_start", "id": i}),
                                           T("מתעלם מהמגבלות של RAM ו-GPU (לא מהבלם ולא מ״עצור הכול״). ייתכן שהעבודה תרוץ לאט יותר.")))
-        if st in ("queued", "held", "running", "paused"):
+        if st == "queued" and not j.get("held") and (m.state or {}).get("running") and str(j.get("reason", "")).startswith(("VRAM budget", "RAM budget", "max concurrent", "free RAM", "free commit")):
+            row.addWidget(self.act_button("play", T("עצור את הרצה והרץ את זו"), lambda _=False, i=j["id"]: self.preempt(i),
+                                          T("העבודה שרצה עכשיו נעצרת וחוזרת לסוף התור (מתחילה מחדש כשתגיע שוב), וזו רצה במקומה. השהיה לא עוזרת: עבודה מושהית ממשיכה לתפוס זיכרון.")))
+        if st in ("running", "paused"):
+            row.addWidget(self.act_button("x", T("עצור"), lambda _=False, i=j["id"]: m.api({"op": "cancel", "id": i}), T("עוצר את העבודה לגמרי. היא לא תחזור לתור")))
+        elif st in ("queued", "held"):
             row.addWidget(self.act_button("x", T("בטל"), lambda _=False, i=j["id"]: m.api({"op": "cancel", "id": i})))
         row.addStretch(1)
         a.lay.addLayout(row)
@@ -1286,6 +1539,7 @@ class AssistantPanel(W.QFrame):
         self.pending = []
         self.denial_ui = []
         self.turn_text = False
+        self.live = None
         self.qs = QtCore.QSettings("ai-broker", "assistant")
         outer = W.QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -1341,6 +1595,7 @@ class AssistantPanel(W.QFrame):
         self.edit = W.QPlainTextEdit()
         self.edit.setFixedHeight(62)
         self.edit.setPlaceholderText(T("כתוב לעוזר…  (Enter לשליחה)"))
+        self.edit.textChanged.connect(self._align_edit)
         self.edit.setStyleSheet("QPlainTextEdit { background: transparent; border: none; color: #dfe1e5; font-family: 'Segoe UI', 'Helvetica Neue', Arial; font-size: 10.5pt; }")
         self.edit.installEventFilter(self)
         cl.addWidget(self.edit)
@@ -1354,6 +1609,18 @@ class AssistantPanel(W.QFrame):
         cl.addLayout(row)
         v.addWidget(comp)
         self.render_history()
+
+    def _align_edit(self):
+        """What is typed starts at the side of its own language: Hebrew at the right, English at the left (a plain edit box would keep the left).
+        Only the document's default alignment works in a QPlainTextEdit; a paragraph format is ignored."""
+        first = next((c for c in self.edit.toPlainText() if c.isalpha()), "")
+        right = bool(first) and "֐" <= first <= "ࣿ"
+        want = (Qt.AlignRight if right else Qt.AlignLeft) | Qt.AlignAbsolute
+        doc = self.edit.document()
+        opt = doc.defaultTextOption()
+        if opt.alignment() != want:
+            opt.setAlignment(want)
+            doc.setDefaultTextOption(opt)
 
     def eventFilter(self, obj, ev):
         if obj is self.edit and ev.type() == QtCore.QEvent.KeyPress and ev.key() in (Qt.Key_Return, Qt.Key_Enter) and not (ev.modifiers() & Qt.ShiftModifier):
@@ -1385,7 +1652,7 @@ class AssistantPanel(W.QFrame):
             b = W.QPushButton(ex)
             b.setObjectName("tool")
             b.clicked.connect(lambda _=False, e=ex: (self.edit.setPlainText(e), self.on_send_click()))
-            w.lay.addWidget(b)
+            w.lay.addWidget(b, 0, Qt.AlignLeft)             # as wide as its text, at the start side like the message above it
         self.col.insertWidget(0, aligned_start(w))
         for m in self.hist.get("messages", []):
             self.add_bubble(m["role"], m["text"], save=False, md=(m["role"] != "user"))
@@ -1419,6 +1686,7 @@ class AssistantPanel(W.QFrame):
 
     def start_turn(self, message, extra):
         self.turn_text = False
+        self.live = None
         self.worker = assistant.Worker(message, self.hist.get("session"), self.model_box.currentData(), extra)
         self.worker.event.connect(self.on_event)
         self.worker.finished_turn.connect(self.on_done)
@@ -1429,17 +1697,53 @@ class AssistantPanel(W.QFrame):
         self.worker.start()
 
     def on_event(self, ev):
+        if ev.get("type") == "stream_event":                    # the answer arrives word by word: show it as it comes
+            se = ev.get("event") or {}
+            if se.get("type") == "content_block_start" and (se.get("content_block") or {}).get("type") == "text":
+                self.live = None
+            elif se.get("type") == "content_block_delta" and (se.get("delta") or {}).get("type") == "text_delta":
+                if self.live is None:
+                    self.live = {"bubble": self.add_bubble("assistant", "", save=False, md=True), "text": "", "t": 0.0}
+                    self.live["view"] = self.live["bubble"].findChild(MessageView)
+                    self.activity.setText(T("כותב…"))
+                self.live["text"] += se["delta"].get("text", "")
+                self.turn_text = True
+                now = time.time()
+                if self.live["view"] is not None and now - self.live["t"] > 0.07:
+                    self.live["t"] = now
+                    self.live["view"].set_content(self.live["text"].strip(), True)
+                    self.scroll_down()
+            return
         if ev.get("type") != "assistant":
             return
         for blk in (ev.get("message") or {}).get("content", []):
             if blk.get("type") == "text" and blk.get("text", "").strip():
                 self.turn_text = True
-                self.add_bubble("assistant", blk["text"].strip(), md=True)
+                if self.live is not None:                       # the finished text replaces what was streamed
+                    txt = blk["text"].strip()
+                    if self.live["view"] is not None:
+                        self.live["view"].set_content(txt, True)
+                    self.hist["messages"].append({"role": "assistant", "text": txt})
+                    assistant.save_history(self.hist)
+                    self.live = None
+                    self.scroll_down()
+                else:
+                    self.add_bubble("assistant", blk["text"].strip(), md=True)
             elif blk.get("type") == "tool_use":
                 self.activity.setText(permissions.analyze(blk.get("name", ""), blk.get("input") or {}).text + "…")
 
+    def scroll_down(self):
+        sb = self.scroll.verticalScrollBar()
+        sb.setValue(sb.maximum())
+
     def on_done(self, res):
         self.activity.setVisible(False)
+        if self.live is not None:                               # streamed text that never got its final message (stopped, error): keep what was shown
+            txt = self.live["text"].strip()
+            if txt:
+                self.hist["messages"].append({"role": "assistant", "text": txt})
+                assistant.save_history(self.hist)
+            self.live = None
         self.bar.setVisible(False)
         self.send_btn.setText(T("שלח"))
         if res.get("session"):
@@ -1951,6 +2255,13 @@ class SetupWizard(W.QDialog):
         h = W.QHBoxLayout(card)
         h.setContentsMargins(14, 12, 14, 12)
         h.setSpacing(12)
+        if p.get("thumb"):
+            pic = W.QLabel()
+            pm = QtGui.QPixmap(p["thumb"])
+            if not pm.isNull():
+                pic.setPixmap(pm.scaled(96, 96, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+                pic.setFixedSize(96, 96)
+                h.addWidget(pic, 0, Qt.AlignTop)
         cb = W.QCheckBox()
         can = p["downloadable"] and p["status"] != "installed" and p["fit"] != "no" and not p["tools_missing"]
         cb.setEnabled(bool(can))
@@ -2204,10 +2515,85 @@ class Main(W.QMainWindow):
         self.poller.down.connect(self.on_down)
         self.poller.start()
         self.load_types()
+        self.types_seen = self.types_stamp()
+        self.code_stamp0 = paths.code_stamp()                    # the code this window started with
+        self.update_ticks, self.told_window, self.told_service = 0, False, False
+        t3 = QtCore.QTimer(self)
+        t3.timeout.connect(self.check_updates)
+        t3.start(5000)
         QtCore.QTimer.singleShot(2500, self.maybe_first_run)
         t = QtCore.QTimer(self)
         t.timeout.connect(self.refresh_files)
         t.start(3000)
+        t2 = QtCore.QTimer(self)                                 # a job type that is added or edited (by the assistant, or by hand) shows up in the list without a restart
+        t2.timeout.connect(self.reload_types_if_changed)
+        t2.start(4000)
+
+    def check_updates(self):
+        """Keep this window and the service on the CURRENT code. A running program keeps the code it started with, so after an update it would show the old version: the window
+        restarts itself (at once when it sits hidden in the tray, otherwise after one click) and the service is restarted when no job is running."""
+        now = paths.code_stamp()
+        if now != self.code_stamp0:
+            if not self.isVisible():
+                self.restart_self()
+                return
+            if not self.told_window:
+                self.told_window = True
+                self.toast(T("יש גרסה חדשה של התוכנה"), "info", T("הפעל מחדש עכשיו"), self.restart_self, 600000)
+        self.update_ticks += 1
+        if self.update_ticks % 4:                                  # the service: every 20 seconds
+            return
+        try:
+            r = client.call({"op": "version"}, timeout=3)
+        except client.BrokerDown:
+            return
+        if r.get("ok") and r.get("stamp") == now:
+            return
+        s = self.state or {}
+        if s.get("running") or s.get("queued"):
+            if not self.told_service:
+                self.told_service = True
+                self.toast(T("השירות ירוץ על הגרסה החדשה אחרי שהתור יתפנה"), "info")
+            return
+        self.told_service = False
+        try:
+            client.call({"op": "shutdown"}, timeout=5)
+            time.sleep(1.0)
+            client.start_daemon()
+        except Exception:
+            pass
+
+    def restart_self(self):
+        """Open the window again from the current code (the same way a language change does)."""
+        args = [a for a in sys.argv[1:] if a != "--hidden"] + (["--hidden"] if not self.isVisible() else [])
+        import subprocess
+        env = dict(os.environ, AIBROKER_RESTART="1")
+        subprocess.Popen([sys.executable, "-m", "aibroker.gui"] + args, cwd=str(paths.ROOT), env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         creationflags=osutil.NO_WINDOW | osutil.DETACHED, **osutil.SESSION)
+        self.quitting = True
+        self.close()
+        W.QApplication.quit()
+
+    def types_stamp(self):
+        """Changes when a job-type file or the model catalog changes."""
+        files = []
+        for d in [paths.TYPES_DIR, paths.USER_TYPES_DIR] + sorted(paths.ADAPTERS.glob("*/jobtypes")):
+            if Path(d).is_dir():
+                files += list(Path(d).glob("*.json"))
+        files += [Path(d) / "packs.json" for d in catalog.CATALOG_DIRS]
+        out = []
+        for f in files:
+            try:
+                out.append((str(f), f.stat().st_mtime))
+            except OSError:
+                pass
+        return tuple(sorted(out))
+
+    def reload_types_if_changed(self):
+        now = self.types_stamp()
+        if now != getattr(self, "types_seen", now):
+            self.types_seen = now
+            self.load_types()
 
     def fit_to_screen(self):
         """Never half off-screen: shrink to the screen the window is on and pull it back inside (also if a saved geometry came from a bigger screen)."""
@@ -2221,6 +2607,12 @@ class Main(W.QMainWindow):
 
     def showEvent(self, e):
         style_titlebar(int(self.winId()))
+        if osutil.IS_WIN and not getattr(self, "_identity_set", False):
+            self._identity_set = True                          # pinning this window to the taskbar must pin AI Broker (its icon, its launcher), not python.exe
+            winshell.set_window_identity(int(self.winId()), "AIBroker.Window", '"%s"' % (paths.ROOT / "AI_Broker.bat"), "%s,0" % (paths.ROOT / "assets" / "ai-broker-v4.ico"), "AI Broker")
+            if self.persist:
+                import threading
+                threading.Thread(target=lambda: winshell.fix_app_shortcuts(paths.ROOT), daemon=True).start()     # pinned / desktop / Start shortcuts join the window's taskbar button
         super().showEvent(e)
 
     def toast(self, text, kind="info", action=None, fn=None, ms=4200):
@@ -2578,7 +2970,7 @@ class Main(W.QMainWindow):
     def model_first_type(self, od=None):
         od = od if od is not None else self.sel_model
         g = next((m for m in self.models if m["dir"] == od), None)
-        return g["tids"][0] if g else None
+        return g["tids"][0] if g and g["tids"] else None
 
     def model_menu(self, pos):
         it = self.model_list.itemAt(pos)
@@ -2651,7 +3043,7 @@ class Main(W.QMainWindow):
         head = m.addAction(T("שלח את התמונה אל:"))
         head.setEnabled(False)
         for g in self.models:
-            cfg = (self.types.get(g["tids"][0], {}).get("chat") or {})
+            cfg = (self.types.get(g["tids"][0], {}).get("chat") or {}) if g["tids"] else {}
             if cfg.get("file"):
                 m.addAction(sym_icon(g["sym"], g["color"], 16), "%s   ·   %s" % (cfg.get("send_label") or g["title"], g["title"]), lambda od=g["dir"], p_=path: self.send_to(od, p_))
         m.addSeparator()
@@ -2760,7 +3152,7 @@ class Main(W.QMainWindow):
             pass
         args = [a for a in sys.argv[1:] if a != "--hidden"]
         import subprocess
-        env = dict(os.environ, AIBROKER_LANG=code)
+        env = dict(os.environ, AIBROKER_LANG=code, AIBROKER_RESTART="1")
         subprocess.Popen([sys.executable, "-m", "aibroker.gui"] + args, cwd=str(paths.ROOT), env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          creationflags=osutil.NO_WINDOW | osutil.DETACHED, **osutil.SESSION)
         self.quitting = True
@@ -2783,6 +3175,16 @@ class Main(W.QMainWindow):
             g = groups.setdefault(od, dict(dir=od, title=loc(t, "title"), sym=SYM.get(t.get("icon"), "•"), color=t.get("color", "#78909c"), tids=[],
                                            group=t.get("group", "Other"), group_he=loc(t, "group") or T("אחר")))
             g["tids"].append(tid)
+        GROUP_OF = {"image": "Images", "3d": "3D", "audio": "Audio", "game": "Game", "text": "Other"}
+        group_he = {k: v["group_he"] for k, v in ((x["group"], x) for x in groups.values())}
+        group_he.update({k: group_he.get(k) or n for k, n in (("Images", T("תמונות")), ("3D", T("תלת-ממד")), ("Audio", T("שמע")), ("Game", T("המשחק")), ("Other", T("אחר")))})
+        rts = catalog.roots()
+        for pk in catalog.load().values():                   # installed models that have no job type yet: a page of their own, where the assistant works with them
+            if pk.get("jobtypes") or catalog.status(pk, rts) != "installed":
+                continue
+            gk = GROUP_OF.get(pk.get("category"), "Other")
+            groups["pack_" + pk["id"]] = dict(dir="pack_" + pk["id"], title=loc(pk, "title"), sym="•", color="#78909c", tids=[], group=gk, group_he=group_he[gk],
+                                              thumb=catalog.thumb_path(pk), pack=pk, what=loc(pk, "what"))
         names = {"blender": T("עבודות Blender"), "tripo_shape": T("דגם 3D (TripoSG)"), "step1x_shape": T("דגם 3D (Step1X)"), "blender_bake": T("אפיית פרטים"), "qwen_edit": T("עריכת תמונה (Qwen)"), "zimage": T("תמונה מטקסט (Z-Image)"), "music": T("מוזיקה"), "sound": T("צלילים"), "scripts": T("סקריפטים"), "other": T("אחר"), "godot_test": T("בדיקות משחק")}
         self.models = []
         order = ["Images", "3D", "Audio", "Game", "Other"]
@@ -2830,7 +3232,7 @@ class Main(W.QMainWindow):
             if g["group"] != last:
                 add(g["group_he"], "__caption__", "caption")
                 last = g["group"]
-            add(g["title"], g["dir"], ic=sym_icon(g["sym"], g["color"], 18))
+            add(g["title"], g["dir"], ic=QtGui.QIcon(g["thumb"]) if g.get("thumb") else sym_icon(g["sym"], g["color"], 18))
         sel = 1
         want = "__assistant__" if self.assistant_mode else cur
         for i in range(ml.count()):
@@ -2863,7 +3265,7 @@ class Main(W.QMainWindow):
                 it.setData(ROLE_RUN, run.get(od, 0))
                 it.setData(ROLE_WAIT, wait.get(od, 0))
                 gg = next((m for m in self.models if m["dir"] == od), None)
-                about = ((loc(self.types.get(gg["tids"][0], {}), "about") or {}).get("what") or "") if gg else ""
+                about = ((loc(self.types.get(gg["tids"][0], {}), "about") or {}).get("what") or "") if gg and gg["tids"] else (gg or {}).get("what", "")
                 if od not in (None, "__assistant__"):
                     it.setToolTip(about + chr(10) * 2 if about else "")
                     it.setToolTip(it.toolTip() + "%s" % it.text() + chr(10) + T("רצות: %d   ממתינות: %d   תוצאות שמורות: %d") % (run.get(od, 0), wait.get(od, 0), it.data(ROLE_COUNT) or 0))
@@ -3164,20 +3566,22 @@ class Main(W.QMainWindow):
             st = "held" if j["state"] == "queued" and j.get("held") else ("paused" if j.get("suspended") else j["state"])
             if j["state"] in ("running", "paused"):
                 tm, ram = T("%d שנ'") % j.get("elapsed", 0), ltr("%.1f GB" % j.get("cur_ws", 0))
-                det = eta_text(j) or (ltr("GPU %.1f GB" % j["cur_vram"]) if j.get("cur_vram") else "")
+                gpu = ltr("%.1f GB" % j["cur_vram"]) if j.get("cur_vram") else "-"
+                det = eta_text(j)
             else:
                 tm, ram, det = fmt_dur(time.time() - j["submitted"]), ltr("~%.0f GB" % j["est_ram"]), (T("עצרת אותה בעצמך") if j.get("held") else he_reason(j.get("reason", "")))
-            vals = [str(j["id"]), ttl, j["name"], j["requester"], STATE_HE.get(st, st), tm, ram, det]
+                gpu = ltr("~%.0f GB" % j["est_vram"]) if j.get("est_vram") else "-"
+            vals = [str(j["id"]), ttl, j["name"], j["requester"], STATE_HE.get(st, st), tm, ram, gpu, det]
             for c, v in enumerate(vals):
                 it = q.item(r, c) or W.QTableWidgetItem()
                 it.setText(v)
-                it.setToolTip(v if c in (2, 7) else ((T("הערכה: ") + j["est_source"]) if c == 6 else ""))
+                it.setToolTip(v if c in (2, 8) else ((T("הערכה: ") + j["est_source"]) if c in (6, 7) else ""))
                 if c == 1:
                     it.setIcon(sym_icon(sym, color, 16))
                 elif c == 4:
                     it.setForeground(QtGui.QColor(STATE_COLOR.get(st, "#b4b8bf")))
                     it.setIcon(dot_icon(STATE_COLOR.get(st, "#b4b8bf"), 10))
-                elif c == 7:
+                elif c == 8:
                     it.setForeground(QtGui.QColor("#e0a030" if j["state"] == "queued" and j.get("reason") else "#b4b8bf"))
                 flags = Qt.ItemIsEnabled | Qt.ItemIsSelectable
                 if j["state"] == "queued":
@@ -3261,11 +3665,19 @@ def main(argv=None):
     f.setPointSize(10)
     app.setFont(f)
     app.setStyleSheet(QSS)
+    single = shot is None and "--no-single" not in argv and not os.environ.get("AIBROKER_HOME")     # screenshots and tests may run beside a real window
+    stamp = instance.code_stamp(paths.ROOT)
+    if single:
+        found = instance.ask_running(stamp, wait_old_gone=bool(os.environ.get("AIBROKER_RESTART")))
+        if found == "same":
+            return                                       # the window that is already open came to the front
     try:
         client.start_daemon()
     except Exception as e:
         print("could not start the broker:", e)
     win = Main(tray=("--no-tray" not in argv and shot is None), model=model)
+    if single:
+        win.instance = instance.Listener(stamp, win.show_normal, win.quit_gui, win)
     win.persist = shot is None
     if size:
         win.resize(*[int(x) for x in size.lower().split("x")])

@@ -35,11 +35,16 @@ jobs:
           python tests/test_download.py
           python tests/test_platform.py
           python tests/test_strip.py
+          python tests/test_workflows.py
+          python tests/test_transcribe.py
+          python tests/test_instance.py
+          python tests/test_winshell.py
       - name: Every module imports
         run: python -c "import aibroker.daemon, aibroker.gui, aibroker.mcp_server, aibroker.cli, aibroker.hardware, aibroker.system"
       - name: "End to end on a throw-away broker (queue, run anyway, setup, window)"
         run: |
           python tests/e2e_force.py
+          python tests/e2e_preempt.py
           python tests/e2e_setup.py
           python tests/e2e_wizard.py
 

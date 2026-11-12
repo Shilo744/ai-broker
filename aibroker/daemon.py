@@ -30,6 +30,7 @@ class Live:
         self.t0 = time.time()
         self.peak_ws = self.peak_vram = self.cur_ws = self.cur_vram = self.cur_commit = self.peak_commit = 0.0
         self.cancel = False
+        self.requeue = False                                  # stopped on purpose to make room for another job: goes back to the queue instead of ending
         self.timed_out = False
         self.susp_user = self.susp_brake = False
         self.suspended = False
@@ -41,6 +42,7 @@ class Broker:
         paths.LOGS.mkdir(parents=True, exist_ok=True)
         self.cfg = paths.load_config()
         i18n.set_lang(self.cfg.get("lang", "he"))
+        self.stamp = paths.code_stamp()                       # the code this service started with: the window compares it with the code on disk
         self.store = st.Store()
         self.types = st.load_types()
         self.live = {}
@@ -266,6 +268,25 @@ class Broker:
                 raise ValueError("job #%d is already %s" % (jid, j["state"]))
             self.log("cancel #%d" % jid)
 
+    def preempt(self, jid):
+        """Run a waiting job NOW: the running jobs that hold the memory it needs (GPU jobs for a GPU job, any job otherwise) are stopped and put back at the end of the queue,
+        and this one goes to the top. Pausing is not enough: a paused job keeps its memory, so the waiting job would never fit."""
+        with self.lock:
+            j = self.store.get(jid)
+            if not j or j["state"] != "queued":
+                raise ValueError("job #%s is not waiting" % jid)
+            blockers = [lv for i, lv in self.live.items() if j["klass"] != "gpu" or (self.store.get(i) or {}).get("klass") == "gpu"]
+            if not blockers:
+                raise ValueError("nothing is running that holds the memory this job needs")
+            for lv in blockers:
+                lv.requeue = True
+                self._unsuspend(lv)
+                self._kill(lv)
+            self.store.update(jid, held=0)
+            self.move([jid], "top")
+            self.log("preempt: #%d runs now, %d running job(s) stopped and queued again" % (jid, len(blockers)))
+            return len(blockers)
+
     def rerun(self, jid, requester=None):
         """Queue the same job again (same type, parameters, estimate override, name) with a NEW output folder."""
         with self.lock:
@@ -410,6 +431,18 @@ class Broker:
             root_ws, root_commit = wu.peak_of_process(lv.proc)
             lv.peak_ws = max(lv.peak_ws, root_ws)
             peak_c = max(lv.jobobj.peak_commit_gb(), root_commit, 0.0 if wu.IS_WIN else lv.peak_commit)
+            if lv.requeue and not lv.cancel:
+                try:
+                    lv.fh.write(("\n[broker] stopped to make room for another job; back in the queue\n").encode())
+                    lv.fh.close()
+                except Exception:
+                    pass
+                lv.jobobj.close()
+                self.store.update(jid, state="queued", pos=self.store.next_pos(), started=None, finished=None, rc=None, note="stopped to make room for another job; waiting again")
+                del self.live[jid]
+                self.hist_rev += 1
+                self.log("#%d stopped to make room for another job: back in the queue" % jid)
+                continue
             state = "cancelled" if lv.cancel else ("done" if rc == 0 else "failed")
             note = "timeout" if lv.timed_out else ""
             j = self.store.get(jid)
@@ -664,7 +697,8 @@ class Broker:
             out.append(dict(id=p["id"], category=p["category"], title=(p.get("title_en") if en else None) or p["title"], what=(p.get("what_en") if en else None) or p.get("what", ""),
                             fit=r["fit"], why=r["why"], status=r["status"], license=(p.get("license") or {}).get("name", ""), source=p.get("source", ""), needs=p.get("needs", {}),
                             size_bytes=sum(int(f.get("size") or 0) for f in files), todo_bytes=todo["total_bytes"], downloadable=bool(files), manual=(p.get("manual_en") if en else None) or p.get("manual", ""),
-                            note=(p.get("note_en") if en else None) or p.get("note", ""), tools_missing=r["missing_tools"], jobtypes=p.get("jobtypes", [])))
+                            note=(p.get("note_en") if en else None) or p.get("note", ""), tools_missing=r["missing_tools"], jobtypes=p.get("jobtypes", []),
+                            thumb=catalog.thumb_path(p)))
         return dict(ok=True, packs=out, profile=dict(gpu=prof.get("gpu"), ram_gb=prof.get("ram_gb"), disks=prof.get("disks"), software=prof.get("software")), roots=rts)
 
     def install_packs(self, ids, requester="setup"):
@@ -739,6 +773,8 @@ class Broker:
         if op == "cancel":
             self.cancel(int(req["id"]))
             return dict(ok=True)
+        if op == "preempt":
+            return dict(ok=True, stopped=self.preempt(int(req["id"])))
         if op == "job_pause":
             self.job_pause(int(req["id"]))
             return dict(ok=True)
@@ -804,6 +840,8 @@ class Broker:
         if op == "types":
             self.types = st.load_types()
             return dict(ok=True, types=self.types, vars=c["vars"], output_root=c["output_root"])
+        if op == "version":
+            return dict(ok=True, stamp=self.stamp, busy=len(self.live))
         if op == "shutdown":
             self.log("shutdown requested")
             if self.owns_lock and not any((self.store.get(i) or {}).get("hold_lock") for i in self.live):

@@ -1,0 +1,82 @@
+{
+ "id": "ivrit_transcribe",
+ "title": "Transcription with speakers, Small (ivrit.ai Whisper turbo + sherpa-onnx)",
+ "group": "Audio",
+ "klass": "gpu",
+ "model": "whisper_ivrit",
+ "est": {
+  "ram_gb": 4,
+  "vram_gb": 3,
+  "commit_gb": 6
+ },
+ "notes": "faster-whisper + sherpa-onnx in their own Python ({py_whisper}); models: ivrit.ai CTranslate2 folder ({whisper_model}), pyannote segmentation 3.0 and a 3D-Speaker embedding ({diar_seg}, {diar_emb}). Memory numbers are estimates until measured.",
+ "params": {
+  "audio": {
+   "required": true,
+   "help": "audio or video file (wav, mp3, m4a, mp4...)"
+  },
+  "language": {
+   "default": "he",
+   "help": "he = Hebrew; empty = detect"
+  },
+  "device": {
+   "default": "auto",
+   "help": "auto, cuda or cpu"
+  },
+  "speakers": {
+   "default": 0,
+   "help": "number of speakers; 0 = find out by itself"
+  }
+ },
+ "cmd": [
+  "{py_whisper}",
+  "{runners}/transcribe.py",
+  "--audio",
+  "{audio}",
+  "--model",
+  "{whisper_model}",
+  "--outdir",
+  "{outdir}",
+  "--language",
+  "{language}",
+  "--device",
+  "{device}",
+  "--diar-seg",
+  "{diar_seg}",
+  "--diar-emb",
+  "{diar_emb}",
+  "--speakers",
+  "{speakers}",
+  "--dll-dir",
+  "{cudnn_dir}"
+ ],
+ "icon": "🎙️",
+ "color": "#3aa6d9",
+ "output_dir": "transcribe",
+ "chat": {
+  "text": null,
+  "file": "audio",
+  "needs_file": true,
+  "drop_text": "גרור לכאן הקלטה (קובץ שמע או וידאו), או לחץ על הסיכה",
+  "hint": "זה הופך הקלטה בעברית לטקסט ומסמן מי מדבר. גרור לכאן קובץ הקלטה ולחץ שלח. התוצאה: טקסט לפי דוברים, וקובץ כתוביות.",
+  "send_label": "תמלל הקלטה (Small)"
+ },
+ "he_title": "תמלול · Small (מהיר)",
+ "he_desc": "הופך הקלטה בעברית לטקסט ומסמן מי מדבר. המודל הקטן: מהיר יותר",
+ "he_group": "שמע",
+ "he_about": {
+  "what": "הופך הקלטה בעברית לטקסט ומסמן מי מדבר: דובר 1, דובר 2 וכן הלאה. מתאים לשיחה של כמה אנשים.",
+  "inp": "קובץ הקלטה (שמע או וידאו). אפשר לציין כמה דוברים יש, אחרת הוא מנחש",
+  "out": "transcript.txt (פסקה לכל דובר, עם זמן), transcript.srt (כתוביות), transcript.json",
+  "tip": "הדיוק בהפרדת הדוברים תלוי באיכות ההקלטה: דוברים שמדברים בו זמנית עלולים להתערבב."
+ },
+ "en_title": "Transcription · Small (fast)",
+ "en_group": "Audio",
+ "en_desc": "Turns a recording into text and marks who speaks. Small model: faster",
+ "en_about": {
+  "what": "Turns a recording into text and marks who is speaking: Speaker 1, Speaker 2 and so on. Made for a conversation of several people.",
+  "inp": "A recording (audio or video file). You may say how many speakers there are, otherwise it guesses",
+  "out": "transcript.txt (a paragraph per speaker, with time), transcript.srt (subtitles), transcript.json",
+  "tip": "Speaker separation depends on the recording quality: people talking at the same time can get mixed."
+ }
+}
